@@ -25,6 +25,6 @@
    兩個欄位留空 = 展示模式（假資料、不會真的儲存）
    ============================================================ */
 window.KGSH_CONFIG = {
-  url: "",      // 例："https://abcdefgh.supabase.co"
-  anonKey: "",  // 例："eyJhbGciOiJIUzI1NiIs..."
+  url: "https://svyasthydutzsjmipihn.supabase.co",      // 例："https://abcdefgh.supabase.co"
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2eWFzdGh5ZHV0enNqbWlwaWhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMzA3ODYsImV4cCI6MjA5OTcwNjc4Nn0.6pmTsxnzpQPcUSbDT3FC09CMWTP6L3VNE3zmbYQyNo4",  // 例："eyJhbGciOiJIUzI1NiIs..."
 };
