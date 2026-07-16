@@ -735,9 +735,10 @@ $("btn-back").addEventListener("click", () => {
   else { $("detail-page").hidden = true; state.openPostId = null; }
 });
 
-// 分享貼文連結：手機優先用原生分享面板，其次複製到剪貼簿
+// 分享貼文連結：走 /p/id（伺服器端會回傳含標題縮圖的預覽，真人點擊自動跳回站內）
+// 手機優先用原生分享面板，其次複製到剪貼簿
 $("btn-share").addEventListener("click", async () => {
-  const url = location.origin + location.pathname + "#post/" + state.openPostId;
+  const url = location.origin + "/p/" + state.openPostId;
   if (navigator.share) {
     try { await navigator.share({ title: "港討貼文", url }); return; } catch { /* 取消或不支援，改用複製 */ }
   }
@@ -752,6 +753,33 @@ $("btn-share").addEventListener("click", async () => {
     document.execCommand("copy");
     ta.remove();
     toast("貼文連結已複製 🔗");
+  }
+});
+
+// 分享到限時動態：向伺服器要一張為這篇貼文量身產生的 9:16 圖片，
+// 用原生分享面板叫出來（手機上 IG 限動會是其中一個選項）
+$("btn-share-story").addEventListener("click", async () => {
+  const id = state.openPostId;
+  if (!DB.ready) { toast("展示模式無法產生分享圖，需先接上資料庫"); return; }
+  toast("圖片準備中…");
+  try {
+    const res = await fetch(`/api/og?id=${id}&format=story`);
+    if (!res.ok) throw new Error("og-fetch-failed");
+    const blob = await res.blob();
+    const file = new File([blob], "港討.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "港討.png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast("圖片已下載，打開 IG 手動加到限動吧 📸");
+    }
+  } catch {
+    toast("圖片產生失敗，請稍後再試");
   }
 });
 

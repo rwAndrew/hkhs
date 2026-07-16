@@ -83,6 +83,33 @@ python -m http.server 8321
 - 隱藏的貼文與留言，未登入者**連讀都讀不到**（RLS）
 - 版主的置頂／隱藏／恢復／刪除／編輯看板與關於：需要登入（Supabase Auth）
 
+## 分享功能（連結預覽＋限時動態分享圖）
+
+貼文分享連結從 `#post/123`（純前端 hash，機器人抓不到內容）改成真正的路徑
+`/p/123`，搭配兩支伺服器端函式解決「分享到 IG 只有連結、看不到內容」的問題：
+
+- [api/post.js](api/post.js)：真人點擊 `/p/123` 會自動導回站內對應貼文；
+  IG／LINE／FB 等平台的預覽機器人抓到的則是這篇貼文專屬的標題、摘要、圖片
+  （被隱藏或已刪除的貼文會回傳網站預設的通用預覽，不會外流）
+- [api/og.js](api/og.js)：用 [@vercel/og](https://www.npmjs.com/package/@vercel/og)
+  即時產生分享圖，同一支函式依 `format` 參數輸出兩種尺寸：
+  - `format=card`（1200×630）：連結預覽縮圖
+  - `format=story`（1080×1920）：限時動態卡片，模仿「轉發貼文截圖」的質感，
+    logo／標語／貼文卡片／網址都在 IG 限動會被介面遮住的安全區以內
+- 詳情頁的「分享到限時動態」鈕：跟伺服器要一張對應貼文的限動圖 →
+  叫出手機原生分享面板（面板裡本來就會列出「Instagram 限時動態」選項，
+  點一下就帶圖進去，不需要網站自己做不穩定的深層連結）
+
+### 這兩支函式需要的環境變數（跟 config.js 用同一組公開值即可）
+
+到 Vercel 專案設定 → Environment Variables，新增（development／preview／
+production 三個環境都要）：
+
+- `SUPABASE_URL` — 跟 [config.js](config.js) 裡的 `url` 一樣
+- `SUPABASE_ANON_KEY` — 跟 [config.js](config.js) 裡的 `anonKey` 一樣
+
+本機開發可以用 `vercel env pull .env.local` 直接抓下來，不用手動複製貼上。
+
 ## 「部署後十年免人工」檢核表
 
 - [x] 檢舉自動隱藏（資料庫端跨裝置計數）
@@ -96,7 +123,7 @@ python -m http.server 8321
 - [ ] **網域用免費子網域**（`xxx.pages.dev` 等），自訂網域要年繳，忘了繳站就消失
 - [ ] （選配）pg_cron 自動歸檔一年以上舊文——純文字十年用不到 500MB
       免費額度，量大再開即可；**不開放圖片上傳**是十年免費的關鍵
-- 前端唯一的外部依賴是鎖定版本的 supabase-js（`@2.45.4`，jsdelivr CDN），
+- 前端唯一的外部依賴是鎖定版本的 supabase-js（jsdelivr CDN），
   版本固定不會自己更新壞掉；想完全離線可下載該檔改成本地引用
 - **版主交接**：畢業前把 Supabase 帳號與版主信箱密碼交給下一屆即可
 
