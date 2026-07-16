@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   let title = fallbackTitle;
   let description = fallbackDesc;
-  let image = `${origin}/HKHS.png`;
+  let image = `${origin}/cover.png`;
 
   if (post) {
     const board = await fetchBoardLabel(post.board);
