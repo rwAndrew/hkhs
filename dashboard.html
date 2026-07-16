@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>管理後台 — 港討</title>
+  <link rel="icon" href="HKHS.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar" id="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <img class="brand-logo" src="HKHS.png" alt="港討">
+          <div class="brand-text">
+            <h1>管理後台</h1>
+            <span>只有版主看得到這頁</span>
+          </div>
+        </div>
+        <a class="icon-btn" href="index.html" aria-label="回到首頁">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg>
+        </a>
+      </div>
+    </header>
+
+    <main class="feed" id="dash-root">
+      <div class="feed-empty"><span class="emoji">🌊</span><strong>載入中…</strong></div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.6/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="db.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const AVATAR_BG = ["#E0F5F5", "#E8F0FE", "#FFF4E0", "#F3E8FF", "#FFE8EE", "#E8F8E8", "#FFF0E6"];
+    const avatarBg = (seed) => AVATAR_BG[seed.charCodeAt(0) % AVATAR_BG.length];
+    const BOARD_LABELS = {
+      chat: ["💬", "閒聊"], study: ["📚", "課業"], club: ["🎸", "社團"], love: ["💘", "感情"],
+      food: ["🍱", "美食"], trade: ["🏷️", "二手"], notice: ["📣", "公告"],
+    };
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function timeAgo(t) {
+      const d = Date.now() - t, M = 60e3, H = 3600e3;
+      if (d < M) return "剛剛";
+      if (d < H) return Math.floor(d / M) + " 分鐘前";
+      if (d < 24 * H) return Math.floor(d / H) + " 小時前";
+      return Math.floor(d / (24 * H)) + " 天前";
+    }
+    let toastTimer;
+    function toast(msg) {
+      const el = $("toast");
+      el.textContent = msg;
+      el.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => (el.hidden = true), 2200);
+    }
+
+    function statCard(label, value, tone) {
+      return `<div class="stat-card ${tone || ""}">
+        <div class="stat-value">${value}</div>
+        <div class="stat-label">${esc(label)}</div>
+      </div>`;
+    }
+
+    function queuePostItem(p) {
+      const board = BOARD_LABELS[p.board] || ["📋", p.board];
+      return `<div class="queue-item">
+        <div class="queue-head">
+          <span class="queue-type-tag">貼文</span>
+          <span class="board-tag">${board[0]} ${esc(board[1])}</span>
+          <span class="queue-reports ${p.hidden ? "is-hidden" : ""}">🚩 ${p.reports}${p.hidden ? " · 已隱藏" : ""}</span>
+        </div>
+        <div class="queue-body">
+          <div class="avatar" style="background:${avatarBg(p.anon[1])}">${p.anon[0]}</div>
+          <div class="queue-text">
+            ${p.title ? `<strong>${esc(p.title)}</strong>` : ""}
+            <p>${esc(p.text)}</p>
+            <span class="comment-time">${esc(p.anon[1])} · ${timeAgo(p.time)}</span>
+          </div>
+        </div>
+        <div class="queue-actions">
+          <a class="text-btn" href="index.html#post/${p.id}">查看貼文</a>
+          ${p.hidden ? `<button class="mod-restore" data-restore-post="${p.id}">恢復顯示</button>` : ""}
+          <button class="mod-delete" data-delete-post="${p.id}" aria-label="刪除">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>`;
+    }
+
+    function queueCommentItem(c) {
+      return `<div class="queue-item">
+        <div class="queue-head">
+          <span class="queue-type-tag">留言</span>
+          <span class="queue-reports ${c.hidden ? "is-hidden" : ""}">🚩 ${c.reports}${c.hidden ? " · 已隱藏" : ""}</span>
+        </div>
+        <div class="queue-body">
+          <div class="avatar" style="background:${avatarBg(c.anon[1])}">${c.anon[0]}</div>
+          <div class="queue-text">
+            <p>${esc(c.text)}</p>
+            <span class="comment-time">${esc(c.anon[1])} · ${timeAgo(c.time)} · 回覆於「${esc((c.postTitle || "").slice(0, 20))}」</span>
+          </div>
+        </div>
+        <div class="queue-actions">
+          <a class="text-btn" href="index.html#post/${c.postId}">查看貼文</a>
+          ${c.hidden ? `<button class="mod-restore" data-restore-comment="${c.id}">恢復顯示</button>` : ""}
+          <button class="mod-delete" data-delete-comment="${c.id}" aria-label="刪除">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>`;
+    }
+
+    async function loadDashboard() {
+      const [stats, queue] = await Promise.all([DB.loadDashboardStats(), DB.loadReportQueue()]);
+      renderDashboard(stats, queue);
+    }
+
+    function renderDashboard(stats, queue) {
+      const boardRows = Object.entries(stats.boardCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, n]) => {
+          const label = BOARD_LABELS[id] || ["📋", id];
+          const pct = stats.totalPosts ? Math.round((n / stats.totalPosts) * 100) : 0;
+          return `<div class="board-bar-row">
+            <span class="board-bar-label">${label[0]} ${esc(label[1])}</span>
+            <div class="board-bar-track"><div class="board-bar-fill" style="width:${pct}%"></div></div>
+            <span class="board-bar-count">${n}</span>
+          </div>`;
+        }).join("");
+
+      const queueItems = [...queue.posts, ...queue.comments.map((c) => ({ ...c, __isComment: true }))]
+        .sort((a, b) => b.reports - a.reports);
+
+      const queueHtml = queueItems.length
+        ? queueItems.map((it) => (it.__isComment ? queueCommentItem(it) : queuePostItem(it))).join("")
+        : `<div class="feed-empty"><span class="emoji">✨</span><strong>目前沒有被檢舉的內容</strong><p>檢舉佇列是空的，很乾淨</p></div>`;
+
+      $("dash-root").innerHTML = `
+        <div class="stat-grid">
+          ${statCard("總貼文數", stats.totalPosts)}
+          ${statCard("總留言數", stats.totalComments)}
+          ${statCard("今日新增貼文", stats.todayPosts)}
+          ${statCard("隱藏中（貼文＋留言）", stats.hiddenPosts + stats.hiddenComments, (stats.hiddenPosts + stats.hiddenComments) ? "stat-warn" : "")}
+        </div>
+
+        <section class="dash-section">
+          <h2 class="dash-section-title">看板分佈</h2>
+          <div class="board-bar-list">${boardRows || "<p class=\"dash-empty-hint\">還沒有貼文</p>"}</div>
+        </section>
+
+        <section class="dash-section">
+          <h2 class="dash-section-title">檢舉佇列 ${queueItems.length ? `<span class="queue-count">${queueItems.length}</span>` : ""}</h2>
+          <p class="dash-section-hint">累積檢舉滿 3 次會自動隱藏；這裡連還沒到門檻的也會列出來，方便你提早留意。</p>
+          ${queueHtml}
+        </section>
+
+        <section class="dash-section">
+          <h2 class="dash-section-title">其他管理</h2>
+          <div class="dash-links">
+            <a class="dash-link-card" href="index.html#tab-boards">
+              <span>🗂️</span>
+              <div><strong>編輯看板</strong><p>新增、改名、刪除看板</p></div>
+            </a>
+            <a class="dash-link-card" href="index.html#tab-about">
+              <span>📜</span>
+              <div><strong>編輯關於／版規</strong><p>更新公告內容</p></div>
+            </a>
+          </div>
+        </section>
+      `;
+    }
+
+    document.addEventListener("click", async (e) => {
+      const restorePost = e.target.closest("[data-restore-post]");
+      if (restorePost) {
+        await DB.updatePost(+restorePost.dataset.restorePost, { hidden: false, report_count: 0 });
+        toast("貼文已恢復顯示 ✓");
+        loadDashboard();
+        return;
+      }
+      const restoreComment = e.target.closest("[data-restore-comment]");
+      if (restoreComment) {
+        await DB.updateComment(+restoreComment.dataset.restoreComment, { hidden: false, report_count: 0 });
+        toast("留言已恢復顯示 ✓");
+        loadDashboard();
+        return;
+      }
+      const deletePost = e.target.closest("[data-delete-post]");
+      if (deletePost) {
+        if (!confirm("確定要刪除這篇貼文嗎？")) return;
+        await DB.deletePost(+deletePost.dataset.deletePost);
+        toast("貼文已刪除");
+        loadDashboard();
+        return;
+      }
+      const deleteComment = e.target.closest("[data-delete-comment]");
+      if (deleteComment) {
+        if (!confirm("確定要刪除這則留言嗎？")) return;
+        await DB.deleteComment(+deleteComment.dataset.deleteComment);
+        toast("留言已刪除");
+        loadDashboard();
+        return;
+      }
+    });
+
+    if (localStorage.getItem("kgsh-theme") === "dark" ||
+        (!localStorage.getItem("kgsh-theme") && matchMedia("(prefers-color-scheme: dark)").matches)) {
+      document.documentElement.dataset.theme = "dark";
+    }
+
+    (async () => {
+      if (!DB.ready) {
+        $("dash-root").innerHTML = `<div class="feed-empty"><span class="emoji">🔌</span><strong>展示模式無法使用管理後台</strong><p>需先在 config.js 接上資料庫</p></div>`;
+        return;
+      }
+      const isMod = await DB.isMod();
+      if (!isMod) { location.href = "admin.html"; return; }
+      try { await loadDashboard(); }
+      catch (e) { toast("載入失敗，請重新整理"); console.error(e); }
+    })();
+  </script>
+</body>
+</html>

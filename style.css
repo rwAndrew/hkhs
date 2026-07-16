@@ -841,13 +841,17 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .mod-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
   font-size: 12.5px;
   font-weight: 700;
   color: var(--accent);
   background: var(--accent-soft);
   padding: 7px 14px;
   border-radius: var(--r-full);
+  margin: 2px 0 12px;
+  flex-wrap: wrap;
 }
 .mod-badge .mod-logout {
   font-size: 11.5px;
@@ -855,6 +859,14 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   color: var(--text-3);
   padding: 2px 4px;
 }
+.mod-badge .mod-dash-link {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--primary-deep);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+[data-theme="dark"] .mod-badge .mod-dash-link { color: var(--primary); }
 
 .mod-delete {
   margin-left: auto;
@@ -870,6 +882,113 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 .mod-delete:active { transform: scale(0.88); }
 .comment-item .mod-delete { width: 28px; height: 28px; align-self: center; }
+
+/* ============ 管理後台 ============ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.stat-value { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.stat-label { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+.stat-card.stat-warn .stat-value { color: var(--accent); }
+
+.dash-section { margin-top: 8px; }
+.dash-section-title {
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.queue-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  padding: 1px 9px;
+  border-radius: var(--r-full);
+}
+.dash-section-hint { font-size: 12.5px; color: var(--text-3); margin-bottom: 12px; }
+.dash-empty-hint { font-size: 13px; color: var(--text-3); }
+
+.board-bar-list {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.board-bar-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.board-bar-label { width: 64px; flex: none; color: var(--text-2); }
+.board-bar-track { flex: 1; height: 8px; border-radius: var(--r-full); background: var(--surface-2); overflow: hidden; }
+.board-bar-fill { height: 100%; background: var(--primary); border-radius: var(--r-full); }
+.board-bar-count { width: 28px; flex: none; text-align: right; font-weight: 700; color: var(--text-2); }
+
+.queue-item {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.queue-type-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--surface-2);
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+}
+.queue-reports {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.queue-reports.is-hidden { color: #E5484D; }
+.queue-body { display: flex; gap: 10px; }
+.queue-text { flex: 1; min-width: 0; }
+.queue-text strong { font-size: 14px; display: block; margin-bottom: 2px; }
+.queue-text p { font-size: 13.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.queue-actions .text-btn { font-size: 13px; color: var(--primary-deep); padding: 0; }
+.queue-actions .mod-delete { margin-left: auto; }
+
+.dash-links { display: flex; flex-direction: column; gap: 10px; }
+.dash-link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  text-decoration: none;
+  color: inherit;
+  font-size: 20px;
+}
+.dash-link-card strong { font-size: 14.5px; display: block; color: var(--text); }
+.dash-link-card p { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
 
 /* ============ Toast ============ */
 .toast {

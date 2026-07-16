@@ -712,8 +712,16 @@ $("search-clear").addEventListener("click", () => {
   renderFeed();
 });
 
-// 詳情頁：hash 路由（#post/123 可直接分享、支援返回鍵）
+// 詳情頁：hash 路由（#post/123 可直接分享、支援返回鍵；#tab-boards / #tab-about 是管理後台的深連結）
 function syncFromHash() {
+  const tabMatch = location.hash.match(/^#tab-(boards|about|hot|home)$/);
+  if (tabMatch) {
+    state.tab = tabMatch[1];
+    syncTabbar();
+    renderFeed();
+    history.replaceState(null, "", location.pathname);
+  }
+
   const m = location.hash.match(/^#post\/(\d+)$/);
   if (m) {
     const p = POSTS.find((x) => x.id === +m[1]);
@@ -955,8 +963,8 @@ function initModUI() {
   if (!IS_MOD) return;
   const badge = document.createElement("div");
   badge.className = "mod-badge";
-  badge.innerHTML = `⚓ 版主模式 <button class="mod-logout" id="btn-mod-logout">登出</button>`;
-  $("btn-theme").before(badge);
+  badge.innerHTML = `⚓ 版主模式 <a class="mod-dash-link" href="dashboard.html">管理後台</a><button class="mod-logout" id="btn-mod-logout">登出</button>`;
+  document.querySelector(".topbar-inner").after(badge);
   badge.querySelector("#btn-mod-logout").addEventListener("click", async () => {
     if (DB.ready) await DB.signOut();
     localStorage.removeItem("kgsh-mod");

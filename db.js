@@ -160,5 +160,39 @@ const DB = (() => {
       ready ? must(client.from("about_sections").upsert({
         id: s.id, emoji: s.emoji, title: s.title, body: s.text,
       })) : Promise.resolve(),
+
+    // ---------- 管理後台（需登入） ----------
+    loadDashboardStats: async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const count = (q) => q.then(({ count, error }) => { if (error) throw error; return count || 0; });
+      const [totalPosts, hiddenPosts, totalComments, hiddenComments, todayPosts, boardsRaw] = await Promise.all([
+        count(client.from("posts").select("*", { count: "exact", head: true })),
+        count(client.from("posts").select("*", { count: "exact", head: true }).eq("hidden", true)),
+        count(client.from("comments").select("*", { count: "exact", head: true })),
+        count(client.from("comments").select("*", { count: "exact", head: true }).eq("hidden", true)),
+        count(client.from("posts").select("*", { count: "exact", head: true }).gte("created_at", todayStart.toISOString())),
+        client.from("posts").select("board"),
+      ]);
+      if (boardsRaw.error) throw boardsRaw.error;
+      const boardCounts = {};
+      boardsRaw.data.forEach((r) => { boardCounts[r.board] = (boardCounts[r.board] || 0) + 1; });
+      return { totalPosts, hiddenPosts, totalComments, hiddenComments, todayPosts, boardCounts };
+    },
+
+    // 檢舉佇列：只要曾被檢舉過（含未達門檻、正在觀察中的）都列出來，不是只列已隱藏的
+    loadReportQueue: async () => {
+      const [postsRes, commentsRes] = await Promise.all([
+        client.from("posts").select("*").gt("report_count", 0).order("report_count", { ascending: false }),
+        client.from("comments").select("*, posts(id, title, body)").gt("report_count", 0).order("report_count", { ascending: false }),
+      ]);
+      if (postsRes.error) throw postsRes.error;
+      if (commentsRes.error) throw commentsRes.error;
+      const liked = likedSet();
+      return {
+        posts: postsRes.data.map((r) => mapPost({ ...r, comments: [] }, liked)),
+        comments: commentsRes.data.map((c) => ({ ...mapComment(c), postId: c.post_id, postTitle: c.posts?.title || c.posts?.body || "" })),
+      };
+    },
   };
 })();
