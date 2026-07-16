@@ -1,5 +1,5 @@
 /* ============================================================
-   港聲 KGSH — 小港高中匿名討論區
+   港討 HKHS — 小港高中匿名討論區
    主視覺：簡潔・圓潤・海港藍綠
    ============================================================ */
 
@@ -95,14 +95,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .brand-logo {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
-  color: #fff;
-  font-size: 20px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 4px 12px rgba(20, 163, 168, 0.35);
+  display: block;
+  flex: none;
 }
 
 .brand-text h1 { font-size: 19px; font-weight: 800; letter-spacing: 1px; line-height: 1.2; }
@@ -817,8 +811,6 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   margin: 0 auto 16px;
   width: 56px;
   height: 56px;
-  border-radius: 19px;
-  font-size: 26px;
 }
 
 .admin-card h1 { font-size: 20px; font-weight: 800; }

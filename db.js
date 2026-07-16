@@ -1,5 +1,5 @@
 /* ============================================================
-   港聲 資料庫層（Supabase）
+   港討 資料庫層（Supabase）
    config.js 沒填金鑰時 DB.ready = false，app.js 自動退回
    展示模式（假資料）。介面程式完全共用。
    ============================================================ */
@@ -8,7 +8,7 @@ const DB = (() => {
   const cfg = window.KGSH_CONFIG || {};
   const ready = !!(cfg.url && cfg.anonKey && window.supabase);
   if (cfg.url && !window.supabase) {
-    console.warn("港聲：supabase-js 載入失敗，退回展示模式");
+    console.warn("港討：supabase-js 載入失敗，退回展示模式");
   }
   const client = ready ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
 

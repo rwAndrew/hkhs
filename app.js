@@ -1,5 +1,5 @@
 /* ============================================================
-   港聲 KGSH — 前端原型（假資料版）
+   港討 HKHS — 前端原型（假資料版）
    之後串接資料庫時，把 POSTS 改為 API 讀取即可
    ============================================================ */
 
@@ -27,7 +27,7 @@ function saveBoards() {
 
 // ---------- 關於頁內容（版主可編輯） ----------
 const DEFAULT_ABOUT = [
-  { emoji: "🌊", title: "關於港聲", text: "「港聲」是專屬小港高中學生的匿名討論區。不用再私訊 IG 等版主截圖，發文即時、留言即時、貼文可搜尋。" },
+  { emoji: "🌊", title: "關於港討", text: "「港討」是專屬小港高中學生的匿名討論區。不用再私訊 IG 等版主截圖，發文即時、留言即時、貼文可搜尋。" },
   { emoji: "📜", title: "版規", text: "1. 禁止洩漏他人個資（姓名、班級座號、照片）\n2. 禁止霸凌、人身攻擊、歧視言論\n3. 禁止商業廣告與詐騙訊息\n4. 違規貼文將由版主移除，情節重大者停權" },
   { emoji: "🔒", title: "匿名機制", text: "每篇貼文與留言都會隨機分配一個海洋生物身分，不會顯示你的任何個人資訊。" },
 ];
@@ -54,8 +54,8 @@ const H = 3600e3, M = 60e3;
 let POSTS = [
   {
     id: 1, board: "notice", anon: ["📣", "版主"], time: now - 2 * H, likes: 87, liked: false, pinned: true,
-    title: "🎉 港聲匿名版正式上線！",
-    text: "以前大家投稿都要私訊 IG 等版主截圖上傳，想找舊貼文根本大海撈針。現在有了「港聲」，發文即時、留言即時，最重要的是——終於可以搜尋了！\n\n版規：\n1. 禁止洩漏他人個資（姓名、班級座號、照片）\n2. 禁止霸凌、人身攻擊\n3. 禁止商業廣告\n\n祝大家使用愉快 🌊",
+    title: "🎉 港討匿名版正式上線！",
+    text: "以前大家投稿都要私訊 IG 等版主截圖上傳，想找舊貼文根本大海撈針。現在有了「港討」，發文即時、留言即時，最重要的是——終於可以搜尋了！\n\n版規：\n1. 禁止洩漏他人個資（姓名、班級座號、照片）\n2. 禁止霸凌、人身攻擊\n3. 禁止商業廣告\n\n祝大家使用愉快 🌊",
     comments: [
       { anon: ["🐬", "匿名海豚"], text: "終於不用等版主上線了 QQ 推推", time: now - 1.8 * H },
       { anon: ["🦀", "匿名螃蟹"], text: "搜尋功能真的太重要，以前想找二手課本的貼文都找不到", time: now - 1.5 * H },
@@ -474,7 +474,7 @@ document.addEventListener("click", async (e) => {
       if (state.openPostId === p.id) location.hash = "";
       toast("已達檢舉門檻，貼文自動隱藏 🚫");
     } else {
-      toast("已收到檢舉，謝謝你守護港聲 🙏");
+      toast("已收到檢舉，謝謝你守護港討 🙏");
     }
     renderFeed();
     if (!$("detail-page").hidden && state.openPostId) renderDetail();
@@ -739,7 +739,7 @@ $("btn-back").addEventListener("click", () => {
 $("btn-share").addEventListener("click", async () => {
   const url = location.origin + location.pathname + "#post/" + state.openPostId;
   if (navigator.share) {
-    try { await navigator.share({ title: "港聲貼文", url }); return; } catch { /* 取消或不支援，改用複製 */ }
+    try { await navigator.share({ title: "港討貼文", url }); return; } catch { /* 取消或不支援，改用複製 */ }
   }
   try {
     await navigator.clipboard.writeText(url);
@@ -949,7 +949,7 @@ async function init() {
       if (about.length) ABOUT = about;
       POSTS = posts;
     } catch (e) {
-      console.error("港聲：資料庫連線失敗", e);
+      console.error("港討：資料庫連線失敗", e);
       toast("資料庫連線失敗，目前為離線展示");
     }
   } else {
