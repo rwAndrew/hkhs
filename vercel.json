@@ -1,5 +1,8 @@
 {
   "rewrites": [
     { "source": "/p/:id", "destination": "/api/post?id=:id" }
-  ]
+  ],
+  "functions": {
+    "api/ig-publish.js": { "maxDuration": 60 }
+  }
 }

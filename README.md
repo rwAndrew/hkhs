@@ -116,6 +116,36 @@ production 三個環境都要）：
 
 本機開發可以用 `vercel env pull .env.local` 直接抓下來，不用手動複製貼上。
 
+## IG 自動發佈（每篇新貼文 → 港討的 Instagram）
+
+每篇新貼文發佈滿 10 分鐘、沒被檢舉隱藏，就會自動發成 IG 貼文
+（圖用 `/api/og` 的卡片圖，說明文字含貼文內容摘要＋回站連結）。
+相關檔案：[api/ig-publish.js](api/ig-publish.js)（發佈端點）、
+[ig-setup.sql](ig-setup.sql)（資料表＋每 5 分鐘排程）。
+
+### 版主設定步驟（一次性，約 30 分鐘）
+
+1. **IG 帳號**：用新 Gmail 註冊 IG → 設定 → 帳號類型 → 切換為**專業帳號**（選創作者即可）
+2. **Meta 開發者**：到 <https://developers.facebook.com> 用同一組帳號註冊開發者
+   → My Apps → Create App → 用例選「Instagram」
+3. **綁定帳號拿 token**：App 後台 → Instagram → API setup with Instagram login
+   → 登入港討的 IG 帳號 → **Generate token**，複製那串長效 token（60 天效期，程式會自動續）
+4. **Supabase**：SQL Editor 執行 [ig-setup.sql](ig-setup.sql)
+   （先把裡面的 `YOUR_SECRET` 換成版主保管的密鑰），
+   然後執行 `update ig_config set access_token = '貼上token', refreshed_at = now() where id = 1;`
+5. **Vercel 環境變數**：專案 Settings → Environment Variables 加
+   `SUPABASE_SERVICE_ROLE_KEY`（值在 Supabase 的 Project Settings → API Keys →
+   `service_role`；**這把鑰匙絕對不能放進前端或 git**）→ 重新部署
+
+### 運作與維護
+
+- token 會在 30 天時自動續期，正常情況不用管
+- 發佈失敗會自動重試（最多 5 次），紀錄在 `ig_published` 表
+- 想暫停：SQL Editor 執行 `select cron.unschedule('ig-auto-publish');`
+- **誠實警告**：這是全站最不「十年免維護」的功能——IG 帳號改密碼、
+  Meta 安全判定、或 API 政策變動都可能讓 token 失效，屆時要人工重跑步驟 3。
+  壞掉不影響網站本體，版主有空再修即可
+
 ## 「部署後十年免人工」檢核表
 
 - [x] 檢舉自動隱藏（資料庫端跨裝置計數）
