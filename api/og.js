@@ -176,36 +176,36 @@ function cardLayout({ post, board, comments, title, body, logoUrl }) {
   );
 }
 
-// IG 貼文用（3:4，1080x1440）。實測 IG 會完整顯示整張 3:4 圖，不會裁切，
-// 所以版面直接撐滿畫布即可，不用刻意預留防裁邊界。
+// IG 貼文用（3:4，1080x1440）。
+// 排版原則：品牌列＋卡片＋底部說明卡是「一整組」，垂直置中、左右對稱、不傾斜。
+// IG 在不同地方會用不同比例裁切（動態 4:5、個人檔案方格 1:1），置中對稱的版面
+// 在三種情況下主體都留在畫面中央，不會歪掉或被切到重點。整組高度也刻意控制在
+// 1:1 方格裁切（中央 1080x1080）容納得下的範圍內。
 function postLayout({ post, board, comments, logoUrl }) {
   const hasTitle = !!post.title;
   const headline = hasTitle ? post.title : excerpt(post.body, 55);
   const subtext = hasTitle ? excerpt(post.body, 110) : null;
 
-  // 卡片跟底部說明卡包成同一組、間距固定，貼文內容再短也不會在中間留一大片空白
-  // ——彈性空間統一吸收在「頂端 spacer」，讓整組內容自然地落在畫面中下段。
   return h(
     "div",
     { style: {
       width: "100%", height: "100%", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "0 40px",
       background: BRAND_GRADIENT, fontFamily: "Noto Sans TC",
     } },
+
     h(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 16, padding: "60px 44px 0" } },
+      { style: { display: "flex", alignItems: "center", gap: 16, marginBottom: 34 } },
       h("img", { src: logoUrl, width: 52, height: 52, style: { borderRadius: 16 } }),
       h("div", { style: { fontSize: 30, color: "#fff", fontWeight: 700, display: "flex" } }, "港討")
     ),
 
-    h("div", { style: { flex: 1, minHeight: 40 } }),
-
     h(
       "div",
       { style: {
-        display: "flex", flexDirection: "column", margin: "0 40px", padding: 60,
-        background: "#fff", borderRadius: 44, boxShadow: "0 44px 88px rgba(4,20,22,0.32)",
-        transform: "rotate(-1.5deg)",
+        width: "100%", display: "flex", flexDirection: "column", padding: 56,
+        background: "#fff", borderRadius: 44, boxShadow: "0 40px 80px rgba(4,20,22,0.3)",
       } },
       h("div", { style: { display: "flex", justifyContent: "flex-end" } }, boardTag(board, { fontSize: 26, color: "#0E7E82", background: "#E0F5F5", padding: "10px 24px", borderRadius: 999 })),
       h("div", { style: { fontSize: 58, fontWeight: 700, color: "#1F2A33", marginTop: 24, lineHeight: 1.35, display: "flex" } }, headline),
@@ -221,30 +221,24 @@ function postLayout({ post, board, comments, logoUrl }) {
 
     h(
       "div",
-      { style: { display: "flex", justifyContent: "center", marginTop: 44 } },
+      { style: {
+        background: "rgba(255,255,255,0.96)", borderRadius: 32, padding: "28px 48px", marginTop: 34,
+        display: "flex", flexDirection: "column", gap: 16, minWidth: 480,
+      } },
       h(
         "div",
-        { style: {
-          background: "rgba(255,255,255,0.96)", borderRadius: 32, padding: "30px 50px",
-          display: "flex", flexDirection: "column", gap: 18, minWidth: 480,
-        } },
-        h(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 20 } },
-          h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "港討 IG"),
-          h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "@hkhs_chat")
-        ),
-        h("div", { style: { height: 2, background: "#E8EDF1" } }),
-        h(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 20 } },
-          h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "投稿網站"),
-          h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "hkhs.vercel.app")
-        )
+        { style: { display: "flex", alignItems: "center", gap: 20 } },
+        h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "港討 IG"),
+        h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "@hkhs_chat")
+      ),
+      h("div", { style: { height: 2, background: "#E8EDF1" } }),
+      h(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 20 } },
+        h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "投稿網站"),
+        h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "hkhs.vercel.app")
       )
-    ),
-
-    h("div", { style: { height: 64 } })
+    )
   );
 }
 
