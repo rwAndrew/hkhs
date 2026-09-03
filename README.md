@@ -146,6 +146,33 @@ production 三個環境都要）：
   Meta 安全判定、或 API 政策變動都可能讓 token 失效，屆時要人工重跑步驟 3。
   壞掉不影響網站本體，版主有空再修即可
 
+## Threads 自動發佈（跟 IG 平行、互不影響）
+
+架構跟 IG 幾乎一樣（同一個 Meta 帳號體系、同樣的容器→發佈模式），同一篇貼文
+會**分別、獨立**追蹤有沒有發過 IG／Threads，其中一邊失敗不會影響另一邊。
+相關檔案：[api/threads-publish.js](api/threads-publish.js)、
+[threads-setup.sql](threads-setup.sql)。
+
+### 版主設定步驟（已經做過 IG 那次的話，這次快很多）
+
+1. **開通 Threads**：手機打開 Threads App，用港討的 IG 帳密登入啟用一次
+   （如果還沒開過 Threads 個人檔案的話，這步是必須的，沒有 API 能繞過）
+2. **同一個 Meta App 加開 Threads API**：回到剛剛那個 developers.facebook.com
+   的 App 後台 → 左側選單找 **Threads** → 一樣走一次 **Generate token** 的流程
+   （跟 IG 的 token 是分開兩把，但操作步驟你已經熟了）
+3. **Supabase**：SQL Editor 執行 [threads-setup.sql](threads-setup.sql)
+   （前提是 `ig-setup.sql` 已經執行過，pg_cron/pg_net 兩個 extension 已經開過），
+   然後執行 `update threads_config set access_token = '貼上token', refreshed_at = now() where id = 1;`
+4. Vercel 環境變數不用加新的——沿用 `SUPABASE_SERVICE_ROLE_KEY` 和
+   `IG_CRON_SECRET`（兩邊排程共用同一把密鑰）
+
+### 運作與維護
+
+跟 IG 那節一樣：token 30 天自動續期、失敗自動重試（最多 5 次，紀錄在
+`threads_published` 表）、想暫停就執行
+`select cron.unschedule('threads-auto-publish');`。同樣是全站最不
+「十年免維護」的一塊，帳號異常時才需要人工介入重新授權。
+
 ## 「部署後十年免人工」檢核表
 
 - [x] 檢舉自動隱藏（資料庫端跨裝置計數）

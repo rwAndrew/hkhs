@@ -71,7 +71,13 @@ export default async function handler(req, res) {
   }
 
   // ---- IG 設定與 token 續期 ----
-  const cfgRows = await sbGet("ig_config?id=eq.1");
+  let cfgRows;
+  try {
+    cfgRows = await sbGet("ig_config?id=eq.1");
+  } catch (e) {
+    // 最常見情況：ig-setup.sql 還沒執行，資料表根本不存在
+    return res.json({ ok: false, reason: "讀不到 ig_config，ig-setup.sql 執行過了嗎？", detail: String(e.message).slice(0, 300) });
+  }
   const cfg = cfgRows[0];
   if (!cfg || !cfg.access_token) {
     return res.json({ ok: false, reason: "ig_config 還沒填入 access_token，見 README 的 IG 串接步驟" });
