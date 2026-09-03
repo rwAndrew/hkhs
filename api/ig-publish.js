@@ -115,8 +115,9 @@ export default async function handler(req, res) {
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
     try {
-      // IG 只收 JPEG，且比例限制 4:5 ~ 1.91:1；card 格式 1200x630（1.9:1）剛好合格
-      const pngUrl = `${SITE}/api/og?id=${p.id}&format=card`;
+      // IG 只收 JPEG。post 格式是 3:4，比 IG 上限 4:5 更瘦長，IG 發佈時會置中
+      // 裁掉多餘的上下（api/og.js 的 postLayout 已經把版面留在安全範圍內）
+      const pngUrl = `${SITE}/api/og?id=${p.id}&format=post`;
       const jpgUrl = `https://images.weserv.nl/?url=${encodeURIComponent(pngUrl)}&output=jpg&q=88`;
 
       const create = await graph(`v21.0/${igUserId}/media`, {

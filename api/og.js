@@ -49,9 +49,13 @@ export default async function handler(req) {
   const searchParams = url.searchParams;
   const origin = `${proto}://${url.host}`;
   const id = searchParams.get("id");
-  const format = searchParams.get("format") === "story" ? "story" : "card";
+  const formatParam = searchParams.get("format");
+  const format = formatParam === "story" ? "story" : formatParam === "post" ? "post" : "card";
   const debug = searchParams.get("debug") === "1";
-  const size = format === "story" ? { width: 1080, height: 1920 } : { width: 1200, height: 630 };
+  const size =
+    format === "story" ? { width: 1080, height: 1920 } :
+    format === "post"  ? { width: 1080, height: 1440 } :   // IG 貼文用，3:4
+    { width: 1200, height: 630 };
   const logoUrl = `${origin}/HKHS.png`;
   const trace = [];
   const mark = (...a) => trace.push(a.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(" "));
@@ -73,17 +77,17 @@ export default async function handler(req) {
   const title = post.title || excerpt(post.body, 28);
   const body = excerpt(post.body, format === "story" ? 70 : 90);
   const sampleText =
-    title + body + post.anon_name + board.join("") +
-    "港討看看大家在討論什麼小港高中匿名討論區hkhs.vercel.app0123456789";
+    title + body + post.anon_name + board.join("") + post.body.slice(0, 60) +
+    "港討看看大家在討論什麼小港高中匿名討論區投稿網站港討IGhkhs.vercel.app@hkhs_chat0123456789";
 
   let fontData = null;
   try { fontData = await loadFont(sampleText); mark("font bytes", fontData.byteLength); }
   catch (e) { mark("font error", e.message); }
 
   const tree =
-    format === "story"
-      ? storyLayout({ post, board, comments, title, body, logoUrl })
-      : cardLayout({ post, board, comments, title, body, logoUrl });
+    format === "story" ? storyLayout({ post, board, comments, title, body, logoUrl }) :
+    format === "post"  ? postLayout({ post, board, comments, logoUrl }) :
+    cardLayout({ post, board, comments, title, body, logoUrl });
 
   mark("tree built");
   if (debug) return Response.json({ trace, tree });
@@ -168,6 +172,77 @@ function cardLayout({ post, board, comments, title, body, logoUrl }) {
       h("div", { style: { fontSize: 36, fontWeight: 700, color: "#1F2A33", marginTop: 24, display: "flex" } }, title),
       h("div", { style: { fontSize: 26, color: "#64748B", marginTop: 12, lineHeight: 1.5, display: "flex" } }, body),
       h("div", { style: { marginTop: "auto" } }, statRow(post.likes, comments, 22, 28))
+    )
+  );
+}
+
+// IG 貼文用（3:4，1080x1440）。3:4 比 IG 實際支援的上限 4:5 更瘦長，IG 發佈時
+// 會置中裁掉多餘的上下（約各 45px），所以卡片、頁尾都刻意收在安全範圍內，
+// 只把裝飾用的漸層背景留在最外緣、被裁掉也無所謂。
+function postLayout({ post, board, comments, logoUrl }) {
+  const hasTitle = !!post.title;
+  const headline = hasTitle ? post.title : excerpt(post.body, 55);
+  const subtext = hasTitle ? excerpt(post.body, 110) : null;
+
+  return h(
+    "div",
+    { style: {
+      width: "100%", height: "100%", display: "flex", flexDirection: "column", position: "relative",
+      background: BRAND_GRADIENT, fontFamily: "Noto Sans TC",
+    } },
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 14, padding: "110px 40px 0" } },
+      h("img", { src: logoUrl, width: 44, height: 44, style: { borderRadius: 14 } }),
+      h("div", { style: { fontSize: 26, color: "#fff", fontWeight: 700, display: "flex" } }, "港討")
+    ),
+
+    h(
+      "div",
+      { style: { position: "absolute", top: 196, bottom: 380, left: 0, right: 0, display: "flex", alignItems: "center" } },
+      h(
+        "div",
+        { style: {
+          display: "flex", flexDirection: "column", margin: "0 40px", padding: 46,
+          background: "#fff", borderRadius: 40, boxShadow: "0 40px 80px rgba(4,20,22,0.32)",
+          transform: "rotate(-1.5deg)",
+        } },
+        h("div", { style: { display: "flex", justifyContent: "flex-end" } }, boardTag(board, { fontSize: 24, color: "#0E7E82", background: "#E0F5F5", padding: "9px 22px", borderRadius: 999 })),
+        h("div", { style: { fontSize: 50, fontWeight: 700, color: "#1F2A33", marginTop: 20, lineHeight: 1.35, display: "flex" } }, headline),
+        h("div", { style: { width: 72, height: 8, background: "#FF9F68", borderRadius: 6, margin: "22px 0" } }),
+        subtext
+          ? h("div", { style: { fontSize: 34, color: "#64748B", lineHeight: 1.6, display: "flex" } }, subtext)
+          : null,
+        h("div", { style: { display: "flex", gap: 30, marginTop: subtext ? 30 : 4, color: "#94A3B8", fontSize: 26 } },
+          h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "❤️"), h("span", {}, String(post.likes))),
+          h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "💬"), h("span", {}, String(comments)))
+        )
+      )
+    ),
+
+    h(
+      "div",
+      { style: { position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center" } },
+      h(
+        "div",
+        { style: {
+          background: "rgba(255,255,255,0.96)", borderRadius: 30, padding: "26px 44px",
+          display: "flex", flexDirection: "column", gap: 16, minWidth: 460,
+        } },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 20 } },
+          h("span", { style: { fontSize: 22, color: "#64748B", width: 130, display: "flex" } }, "港討 IG"),
+          h("span", { style: { fontSize: 30, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "@hkhs_chat")
+        ),
+        h("div", { style: { height: 2, background: "#E8EDF1" } }),
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 20 } },
+          h("span", { style: { fontSize: 22, color: "#64748B", width: 130, display: "flex" } }, "投稿網站"),
+          h("span", { style: { fontSize: 30, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "hkhs.vercel.app")
+        )
+      )
     )
   );
 }
