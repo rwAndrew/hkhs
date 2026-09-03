@@ -176,74 +176,75 @@ function cardLayout({ post, board, comments, title, body, logoUrl }) {
   );
 }
 
-// IG 貼文用（3:4，1080x1440）。3:4 比 IG 實際支援的上限 4:5 更瘦長，IG 發佈時
-// 會置中裁掉多餘的上下（約各 45px），所以卡片、頁尾都刻意收在安全範圍內，
-// 只把裝飾用的漸層背景留在最外緣、被裁掉也無所謂。
+// IG 貼文用（3:4，1080x1440）。實測 IG 會完整顯示整張 3:4 圖，不會裁切，
+// 所以版面直接撐滿畫布即可，不用刻意預留防裁邊界。
 function postLayout({ post, board, comments, logoUrl }) {
   const hasTitle = !!post.title;
   const headline = hasTitle ? post.title : excerpt(post.body, 55);
   const subtext = hasTitle ? excerpt(post.body, 110) : null;
 
+  // 卡片跟底部說明卡包成同一組、間距固定，貼文內容再短也不會在中間留一大片空白
+  // ——彈性空間統一吸收在「頂端 spacer」，讓整組內容自然地落在畫面中下段。
   return h(
     "div",
     { style: {
-      width: "100%", height: "100%", display: "flex", flexDirection: "column", position: "relative",
+      width: "100%", height: "100%", display: "flex", flexDirection: "column",
       background: BRAND_GRADIENT, fontFamily: "Noto Sans TC",
     } },
     h(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 14, padding: "110px 40px 0" } },
-      h("img", { src: logoUrl, width: 44, height: 44, style: { borderRadius: 14 } }),
-      h("div", { style: { fontSize: 26, color: "#fff", fontWeight: 700, display: "flex" } }, "港討")
+      { style: { display: "flex", alignItems: "center", gap: 16, padding: "60px 44px 0" } },
+      h("img", { src: logoUrl, width: 52, height: 52, style: { borderRadius: 16 } }),
+      h("div", { style: { fontSize: 30, color: "#fff", fontWeight: 700, display: "flex" } }, "港討")
     ),
+
+    h("div", { style: { flex: 1, minHeight: 40 } }),
 
     h(
       "div",
-      { style: { position: "absolute", top: 196, bottom: 380, left: 0, right: 0, display: "flex", alignItems: "center" } },
-      h(
-        "div",
-        { style: {
-          display: "flex", flexDirection: "column", margin: "0 40px", padding: 46,
-          background: "#fff", borderRadius: 40, boxShadow: "0 40px 80px rgba(4,20,22,0.32)",
-          transform: "rotate(-1.5deg)",
-        } },
-        h("div", { style: { display: "flex", justifyContent: "flex-end" } }, boardTag(board, { fontSize: 24, color: "#0E7E82", background: "#E0F5F5", padding: "9px 22px", borderRadius: 999 })),
-        h("div", { style: { fontSize: 50, fontWeight: 700, color: "#1F2A33", marginTop: 20, lineHeight: 1.35, display: "flex" } }, headline),
-        h("div", { style: { width: 72, height: 8, background: "#FF9F68", borderRadius: 6, margin: "22px 0" } }),
-        subtext
-          ? h("div", { style: { fontSize: 34, color: "#64748B", lineHeight: 1.6, display: "flex" } }, subtext)
-          : null,
-        h("div", { style: { display: "flex", gap: 30, marginTop: subtext ? 30 : 4, color: "#94A3B8", fontSize: 26 } },
-          h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "❤️"), h("span", {}, String(post.likes))),
-          h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "💬"), h("span", {}, String(comments)))
-        )
+      { style: {
+        display: "flex", flexDirection: "column", margin: "0 40px", padding: 60,
+        background: "#fff", borderRadius: 44, boxShadow: "0 44px 88px rgba(4,20,22,0.32)",
+        transform: "rotate(-1.5deg)",
+      } },
+      h("div", { style: { display: "flex", justifyContent: "flex-end" } }, boardTag(board, { fontSize: 26, color: "#0E7E82", background: "#E0F5F5", padding: "10px 24px", borderRadius: 999 })),
+      h("div", { style: { fontSize: 58, fontWeight: 700, color: "#1F2A33", marginTop: 24, lineHeight: 1.35, display: "flex" } }, headline),
+      h("div", { style: { width: 80, height: 9, background: "#FF9F68", borderRadius: 6, margin: "26px 0" } }),
+      subtext
+        ? h("div", { style: { fontSize: 38, color: "#64748B", lineHeight: 1.6, display: "flex" } }, subtext)
+        : null,
+      h("div", { style: { display: "flex", gap: 32, marginTop: subtext ? 34 : 6, color: "#94A3B8", fontSize: 28 } },
+        h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "❤️"), h("span", {}, String(post.likes))),
+        h("div", { style: { display: "flex", gap: 8 } }, h("span", {}, "💬"), h("span", {}, String(comments)))
       )
     ),
 
     h(
       "div",
-      { style: { position: "absolute", bottom: 110, left: 0, right: 0, display: "flex", justifyContent: "center" } },
+      { style: { display: "flex", justifyContent: "center", marginTop: 44 } },
       h(
         "div",
         { style: {
-          background: "rgba(255,255,255,0.96)", borderRadius: 30, padding: "26px 44px",
-          display: "flex", flexDirection: "column", gap: 16, minWidth: 460,
+          background: "rgba(255,255,255,0.96)", borderRadius: 32, padding: "30px 50px",
+          display: "flex", flexDirection: "column", gap: 18, minWidth: 480,
         } },
         h(
           "div",
           { style: { display: "flex", alignItems: "center", gap: 20 } },
-          h("span", { style: { fontSize: 22, color: "#64748B", width: 130, display: "flex" } }, "港討 IG"),
-          h("span", { style: { fontSize: 30, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "@hkhs_chat")
+          h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "港討 IG"),
+          h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "@hkhs_chat")
         ),
         h("div", { style: { height: 2, background: "#E8EDF1" } }),
         h(
           "div",
           { style: { display: "flex", alignItems: "center", gap: 20 } },
-          h("span", { style: { fontSize: 22, color: "#64748B", width: 130, display: "flex" } }, "投稿網站"),
-          h("span", { style: { fontSize: 30, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "hkhs.vercel.app")
+          h("span", { style: { fontSize: 24, color: "#64748B", width: 140, display: "flex" } }, "投稿網站"),
+          h("span", { style: { fontSize: 32, color: "#0E7E82", fontWeight: 700, display: "flex" } }, "hkhs.vercel.app")
         )
       )
-    )
+    ),
+
+    h("div", { style: { height: 64 } })
   );
 }
 
