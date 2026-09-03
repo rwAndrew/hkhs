@@ -204,7 +204,9 @@ function postLayout({ post, board, comments, logoUrl }) {
     h(
       "div",
       { style: {
-        width: "100%", display: "flex", flexDirection: "column", padding: 56,
+        // flexShrink:0：萬一未來放寬字數上限、內容超出畫布，寧可超出被裁掉，
+        // 也不要被 flex 壓扁導致兩張卡片的文字疊在一起
+        width: "100%", display: "flex", flexDirection: "column", padding: 56, flexShrink: 0,
         background: "#fff", borderRadius: 44, boxShadow: "0 40px 80px rgba(4,20,22,0.3)",
       } },
       h("div", { style: { display: "flex", justifyContent: "flex-end" } }, boardTag(board, { fontSize: 26, color: "#0E7E82", background: "#E0F5F5", padding: "10px 24px", borderRadius: 999 })),
@@ -222,7 +224,7 @@ function postLayout({ post, board, comments, logoUrl }) {
     h(
       "div",
       { style: {
-        background: "rgba(255,255,255,0.96)", borderRadius: 32, padding: "28px 48px", marginTop: 34,
+        background: "rgba(255,255,255,0.96)", borderRadius: 32, padding: "28px 48px", marginTop: 34, flexShrink: 0,
         display: "flex", flexDirection: "column", gap: 16, minWidth: 480,
       } },
       h(
