@@ -12,7 +12,8 @@ const GRAPH = "https://graph.instagram.com";
 const SITE = "https://hkhs.vercel.app";
 const MAX_ATTEMPTS = 5;
 const PUBLISH_DELAY_MS = 10 * 60e3;
-const PER_RUN_LIMIT = 2;   // 每輪最多發 2 篇，避免瞬間洗版
+const PER_RUN_LIMIT = 1;   // 每輪最多發 1 篇：等圖片處理完成最多要 45 秒，
+                            // 配合 60 秒函式逾時上限，一輪處理多篇會有超時風險
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -38,6 +39,21 @@ async function graph(path, params) {
   const body = new URLSearchParams(params);
   const r = await fetch(`${GRAPH}/${path}`, { method: "POST", body });
   return r.json();
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 輪詢圖片容器狀態，直到 IG 處理完成（FINISHED）才能發佈；ERROR 就直接放棄，
+// 超過 45 秒還沒好也放棄（下一輪 cron 會重試，不會卡住整個函式逾時）
+async function waitUntilFinished(creationId, token) {
+  const deadline = Date.now() + 45e3;
+  while (Date.now() < deadline) {
+    const r = await fetch(`${GRAPH}/${creationId}?fields=status_code&access_token=${encodeURIComponent(token)}`).then((x) => x.json());
+    if (r.status_code === "FINISHED") return;
+    if (r.status_code === "ERROR") throw new Error("media processing failed: " + JSON.stringify(r));
+    await sleep(2500);
+  }
+  throw new Error("media not ready after 45s, will retry next run");
 }
 
 function buildCaption(p) {
@@ -109,6 +125,10 @@ export default async function handler(req, res) {
         access_token: token,
       });
       if (!create.id) throw new Error("media create failed: " + JSON.stringify(create));
+
+      // IG 建完圖片容器後要花幾秒在背景下載處理，太早發佈會報「Media ID is not
+      // available」。輪詢容器狀態直到處理完成（FINISHED）再發佈，最多等 45 秒。
+      await waitUntilFinished(create.id, token);
 
       const pub = await graph(`v21.0/${igUserId}/media_publish`, {
         creation_id: create.id,
