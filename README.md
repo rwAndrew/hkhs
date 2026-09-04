@@ -173,6 +173,29 @@ production 三個環境都要）：
 `select cron.unschedule('threads-auto-publish');`。同樣是全站最不
 「十年免維護」的一塊，帳號異常時才需要人工介入重新授權。
 
+### 同步刪除：網站刪掉／隱藏，Threads 上也跟著刪
+
+貼文在網站被版主刪除、或被檢舉自動隱藏時，如果這篇有真的發過 Threads，
+會**即時**（不用等排程，用資料庫 trigger 直接觸發，通常幾秒內）把 Threads
+上對應那篇也刪掉。相關檔案：[api/threads-delete.js](api/threads-delete.js)、
+[threads-delete-setup.sql](threads-delete-setup.sql)。
+
+**只做了 Threads，沒有 IG**：Instagram 的刪除 API 只支援用「Facebook 登入」
+串接的帳號（需要另外綁一個 Facebook 粉專），我們用的是不需要粉專的
+「Instagram 登入」流程，兩者不相容。實測直接被拒絕，要接的話得整個重新
+串接 IG，工程量跟當初整套 IG 串接差不多，先跳過。IG 上的舊貼文目前不會
+因為網站刪除而跟著消失，需要的話版主要手動去 IG 上刪。
+
+**設定步驟**：
+1. Meta 開發者後台那個 App → Threads → 多加一個 **threads_delete** 權限的
+   use case，重新走一次 Generate token（新 token 蓋掉 `threads_config`
+   舊的那組：`update threads_config set access_token = '新token', refreshed_at = now() where id = 1;`）
+2. Supabase SQL Editor 執行 [threads-delete-setup.sql](threads-delete-setup.sql)
+   （把 `YOUR_SECRET` 換成密鑰）
+
+少了 `threads_delete` 權限也不會讓網站壞掉——刪除同步會失敗，原因記錄在
+`threads_published.last_error`，網站其他功能完全不受影響。
+
 ## 「部署後十年免人工」檢核表
 
 - [x] 檢舉自動隱藏（資料庫端跨裝置計數）
