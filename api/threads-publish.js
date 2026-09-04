@@ -106,14 +106,15 @@ export default async function handler(req, res) {
 
   // ---- 找出待發佈的貼文（跟 IG 各自獨立紀錄，同一篇會分別發到 IG 和 Threads） ----
   // trigger 會帶 post_id 進來，指名處理剛發出來的那一篇，不受上面的等待時間限制
-  const only = req.body?.post_id;
+  // 只收整數，避免帶進查詢字串的值被拿來拼接出別的查詢條件
+  const only = Number.isInteger(Number(req.body?.post_id)) ? Number(req.body.post_id) : null;
   const cutoff = new Date(Date.now() - PUBLISH_DELAY_MS).toISOString();
   const [posts, done] = await Promise.all([
     only
-      ? sbGet(`posts?id=eq.${encodeURIComponent(only)}&hidden=eq.false&select=id,title,body,board,created_at`)
+      ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
       : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
     only
-      ? sbGet(`threads_published?post_id=eq.${encodeURIComponent(only)}&select=post_id,status,attempts`)
+      ? sbGet(`threads_published?post_id=eq.${only}&select=post_id,status,attempts`)
       : sbGet("threads_published?select=post_id,status,attempts"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
