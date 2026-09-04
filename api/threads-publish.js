@@ -1,4 +1,6 @@
-// 每 5 分鐘由 Supabase pg_cron 呼叫：把新貼文自動發佈到 Threads
+// 把新貼文自動發佈到 Threads。兩種觸發方式：
+//   1. 貼文一發出來，資料庫 trigger 立刻帶著 post_id 打過來 → 幾秒內就上架
+//   2. pg_cron 定時空手呼叫 → 補救網，撿走 trigger 沒送到或當下發佈失敗的貼文
 // 架構跟 ig-publish.js 幾乎一樣（同一套 Meta 帳號體系、同樣的容器→輪詢→發佈模式），
 // 差異只在 API 端點是 graph.threads.net，欄位命名和發文字數上限不同。
 
@@ -7,7 +9,10 @@ import { fetchPost, fetchCommentCount, fetchBoardLabel, excerpt } from "../lib/p
 const GRAPH = "https://graph.threads.net/v1.0";
 const SITE = "https://hkhs.vercel.app";
 const MAX_ATTEMPTS = 5;
-const PUBLISH_DELAY_MS = 10 * 60e3;
+// 補救網的門檻：只撿「發出來超過 3 分鐘還沒上架」的貼文。
+// 這個等待時間同時也避免了跟 trigger 撞在一起重複發佈——trigger 那一輪最久
+// 也只跑約 50 秒，早就寫完紀錄了，定時任務才會看到這篇。
+const PUBLISH_DELAY_MS = 3 * 60e3;
 const PER_RUN_LIMIT = 1;      // 跟 ig-publish 一樣：等處理完成最多要 45 秒，一輪只處理 1 篇避免逾時
 const TEXT_LIMIT = 480;       // Threads 上限 500 字，留一點餘裕
 
@@ -100,10 +105,16 @@ export default async function handler(req, res) {
   }
 
   // ---- 找出待發佈的貼文（跟 IG 各自獨立紀錄，同一篇會分別發到 IG 和 Threads） ----
+  // trigger 會帶 post_id 進來，指名處理剛發出來的那一篇，不受上面的等待時間限制
+  const only = req.body?.post_id;
   const cutoff = new Date(Date.now() - PUBLISH_DELAY_MS).toISOString();
   const [posts, done] = await Promise.all([
-    sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
-    sbGet("threads_published?select=post_id,status,attempts"),
+    only
+      ? sbGet(`posts?id=eq.${encodeURIComponent(only)}&hidden=eq.false&select=id,title,body,board,created_at`)
+      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
+    only
+      ? sbGet(`threads_published?post_id=eq.${encodeURIComponent(only)}&select=post_id,status,attempts`)
+      : sbGet("threads_published?select=post_id,status,attempts"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
   const queue = posts

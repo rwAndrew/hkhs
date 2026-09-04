@@ -1,17 +1,20 @@
-// 每 5 分鐘由 Supabase pg_cron 呼叫：把新貼文自動發佈到 Instagram
+// 每分鐘由 Supabase pg_cron 呼叫：把新貼文自動發佈到 Instagram
+//
+// 為什麼 IG 不像 Threads 那樣「發文當下立刻同步」：IG 這條線沒有同步刪除
+// （刪除要走 Facebook 登入那套，跟本站用的 Instagram 登入不相容），一旦發出去
+// 就只能人工到 IG 上刪。所以這裡保留一段緩衝，讓檢舉自動隱藏有時間反應。
 //
 // 流程：
 //   1. 驗證密鑰（避免任何人都能觸發）
 //   2. 讀取 ig_config 的 access token，超過 30 天自動續期（Meta token 壽命 60 天）
-//   3. 找出「發佈滿 10 分鐘、未被隱藏、還沒發過 IG」的貼文
-//      （等 10 分鐘是給檢舉機制反應時間，避免違規內容被轉發到 IG 上刪不掉）
+//   3. 找出「發佈滿 3 分鐘、未被隱藏、還沒發過 IG」的貼文
 //   4. 用現成的 /api/og 產圖（經 weserv 轉成 IG 要求的 JPEG）→ 發佈
 //   5. 成功／失敗都記錄在 ig_published，失敗的下輪重試（最多 5 次）
 
 const GRAPH = "https://graph.instagram.com";
 const SITE = "https://hkhs.vercel.app";
 const MAX_ATTEMPTS = 5;
-const PUBLISH_DELAY_MS = 10 * 60e3;
+const PUBLISH_DELAY_MS = 3 * 60e3;   // 檢舉反應緩衝，見上方說明
 const PER_RUN_LIMIT = 1;   // 每輪最多發 1 篇：等圖片處理完成最多要 45 秒，
                             // 配合 60 秒函式逾時上限，一輪處理多篇會有超時風險
 
