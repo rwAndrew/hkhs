@@ -27,6 +27,25 @@ export default async function handler(req, res) {
 
   const n = Math.min(Math.max(parseInt(req.query?.n, 10) || 10, 1), 50);
 
+  // ?requeue=43 把某篇重試失敗次數用完的貼文放回佇列（例如 Meta 那邊解封之後）。
+  // 只清掉失敗紀錄，已成功發佈的不動，所以不會造成重複發文。
+  const requeue = Number.isInteger(Number(req.query?.requeue)) ? Number(req.query.requeue) : null;
+  if (requeue !== null) {
+    const del = async (table) => {
+      const r = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/${table}?post_id=eq.${requeue}&status=eq.failed`,
+        { method: "DELETE", headers: sbHeaders() }
+      );
+      return r.ok ? "已重置" : `失敗 ${r.status}`;
+    };
+    return res.json({
+      requeue,
+      IG: await del("ig_published"),
+      Threads: await del("threads_published"),
+      note: "下一輪排程（一分鐘內）會重新嘗試發佈",
+    });
+  }
+
   try {
     const posts = await sbGet(
       `posts?order=id.desc&limit=${n}&select=id,title,board,hidden,created_at`
