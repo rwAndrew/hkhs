@@ -88,6 +88,7 @@ export default async function handler(req, res) {
     const brief = (r) => {
       if (!r) return "沒有紀錄（還沒輪到，或通知沒送到）";
       if (r.status === "published") return `已發佈 ${r.ig_media_id || r.threads_id || ""}`.trim();
+      if (r.status === "publishing") return "發佈中";
       return `${r.status}（第 ${r.attempts} 次）${r.last_error ? " → " + r.last_error : ""}`;
     };
 

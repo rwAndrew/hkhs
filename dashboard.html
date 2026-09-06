@@ -137,6 +137,7 @@
     function syncBadge(text) {
       if (text.startsWith("已發佈")) return `<span class="sync-ok">✓ 已發佈</span>`;
       if (text.startsWith("沒有紀錄")) return `<span class="sync-wait">⏳ 等待中</span>`;
+      if (text === "發佈中") return `<span class="sync-wait">⏳ 發佈中</span>`;
       return `<span class="sync-bad">✕ 失敗</span>`;
     }
 
@@ -147,7 +148,7 @@
         const data = await fetchSync("n=8");
         const rows = data.posts.map((p) => {
           // 只有「真的失敗」才給重發按鈕；還在等排程的不算失敗，按了也只是白跑一趟
-          const failed = (s) => !s.startsWith("已發佈") && !s.startsWith("沒有紀錄");
+          const failed = (s) => !s.startsWith("已發佈") && !s.startsWith("沒有紀錄") && s !== "發佈中";
           const err = [
             failed(p.IG) ? "IG：" + p.IG : "",
             failed(p.Threads) ? "Threads：" + p.Threads : "",

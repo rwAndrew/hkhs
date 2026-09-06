@@ -14,6 +14,7 @@
 //   5. 成功／失敗都記錄在 ig_published，失敗的下輪重試（最多 5 次）
 
 import { imageUrl, warmImage } from "../lib/social-image.js";
+import { claim, isPending } from "../lib/publish-claim.js";
 
 const GRAPH = "https://graph.instagram.com";
 const SITE = "https://hkhs.vercel.app";
@@ -121,15 +122,12 @@ export default async function handler(req, res) {
       ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
       : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
     only
-      ? sbGet(`ig_published?post_id=eq.${only}&select=post_id,status,attempts`)
-      : sbGet("ig_published?select=post_id,status,attempts"),
+      ? sbGet(`ig_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
+      : sbGet("ig_published?select=post_id,status,attempts,published_at"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
   const queue = posts
-    .filter((p) => {
-      const d = doneMap.get(p.id);
-      return !d || (d.status === "failed" && d.attempts < MAX_ATTEMPTS);
-    })
+    .filter((p) => isPending(doneMap.get(p.id), MAX_ATTEMPTS))
     .slice(0, PER_RUN_LIMIT);
 
   // ---- 逐篇發佈 ----
@@ -137,6 +135,11 @@ export default async function handler(req, res) {
   for (const p of queue) {
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
+    // 搶不到代表另一輪（排程或即時觸發）正在發這一篇，跳過才不會重複發文
+    if (!(await claim("ig_published", p.id, attempts))) {
+      results.push({ post: p.id, skipped: "另一輪正在處理" });
+      continue;
+    }
     try {
       // post 格式是 3:4，比 IG 上限 4:5 更瘦長，IG 發佈時會置中裁掉多餘的上下
       //（api/og.js 的 postLayout 已經把版面留在安全範圍內）

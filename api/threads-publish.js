@@ -6,6 +6,7 @@
 
 import { fetchPost, fetchCommentCount, fetchBoardLabel, excerpt } from "../lib/post-data.js";
 import { imageUrl, warmImage } from "../lib/social-image.js";
+import { claim, isPending } from "../lib/publish-claim.js";
 
 const GRAPH = "https://graph.threads.net/v1.0";
 const SITE = "https://hkhs.vercel.app";
@@ -115,21 +116,23 @@ export default async function handler(req, res) {
       ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
       : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
     only
-      ? sbGet(`threads_published?post_id=eq.${only}&select=post_id,status,attempts`)
-      : sbGet("threads_published?select=post_id,status,attempts"),
+      ? sbGet(`threads_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
+      : sbGet("threads_published?select=post_id,status,attempts,published_at"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
   const queue = posts
-    .filter((p) => {
-      const d = doneMap.get(p.id);
-      return !d || (d.status === "failed" && d.attempts < MAX_ATTEMPTS);
-    })
+    .filter((p) => isPending(doneMap.get(p.id), MAX_ATTEMPTS))
     .slice(0, PER_RUN_LIMIT);
 
   const results = [];
   for (const p of queue) {
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
+    // 搶不到代表另一輪（排程或即時觸發）正在發這一篇，跳過才不會重複發文
+    if (!(await claim("threads_published", p.id, attempts))) {
+      results.push({ post: p.id, skipped: "另一輪正在處理" });
+      continue;
+    }
     try {
       const jpgUrl = imageUrl(p.id);
       await warmImage(jpgUrl);
