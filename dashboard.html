@@ -146,20 +146,21 @@
       try {
         const data = await fetchSync("n=8");
         const rows = data.posts.map((p) => {
-          const bad = !p.IG.startsWith("已發佈") || !p.Threads.startsWith("已發佈");
+          // 只有「真的失敗」才給重發按鈕；還在等排程的不算失敗，按了也只是白跑一趟
+          const failed = (s) => !s.startsWith("已發佈") && !s.startsWith("沒有紀錄");
           const err = [
-            p.IG.startsWith("已發佈") || p.IG.startsWith("沒有紀錄") ? "" : "IG：" + p.IG,
-            p.Threads.startsWith("已發佈") || p.Threads.startsWith("沒有紀錄") ? "" : "Threads：" + p.Threads,
+            failed(p.IG) ? "IG：" + p.IG : "",
+            failed(p.Threads) ? "Threads：" + p.Threads : "",
           ].filter(Boolean).join("\n");
           return `<div class="sync-row">
             <div class="sync-row-head">
-              <a href="index.html#post/${p.id}">#${p.id} ${esc((p.title || "").slice(0, 18))}</a>
+              <a href="index.html#post/${p.id}">#${p.id} ${esc(p.title ? p.title.slice(0, 18) : "(無標題)")}</a>
               ${p.hidden ? `<span class="sync-wait">已隱藏</span>` : ""}
             </div>
             <div class="sync-row-state">
               <span>IG ${syncBadge(p.IG)}</span>
               <span>Threads ${syncBadge(p.Threads)}</span>
-              ${bad ? `<button class="text-btn" data-requeue="${p.id}">重新發佈</button>` : ""}
+              ${err ? `<button class="text-btn" data-requeue="${p.id}">重新發佈</button>` : ""}
             </div>
             ${err ? `<pre class="sync-err">${esc(err)}</pre>` : ""}
           </div>`;
