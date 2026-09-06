@@ -20,8 +20,20 @@ async function sbGet(path) {
   return r.json();
 }
 
+// 兩種身分都放行：命令列除錯用密鑰，管理後台用版主登入後的 token。
+// 站上只會有版主一個帳號，所以「有效的登入」等同於「是版主」，跟 db.js 的 isMod 一致。
+async function authorized(req) {
+  if (req.query?.secret === process.env.IG_CRON_SECRET) return true;
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) return false;
+  const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: process.env.SUPABASE_ANON_KEY, Authorization: auth },
+  });
+  return r.ok;
+}
+
 export default async function handler(req, res) {
-  if (req.query?.secret !== process.env.IG_CRON_SECRET) {
+  if (!(await authorized(req))) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
@@ -38,12 +50,27 @@ export default async function handler(req, res) {
       );
       return r.ok ? "已重置" : `失敗 ${r.status}`;
     };
-    return res.json({
-      requeue,
+    const cleared = {
       IG: await del("ig_published"),
       Threads: await del("threads_published"),
-      note: "下一輪排程（一分鐘內）會重新嘗試發佈",
-    });
+    };
+    // 清完馬上重發一次，不用等下一輪排程。失敗也沒關係，排程還是會撿。
+    const republish = async (endpoint) => {
+      try {
+        const r = await fetch(`https://hkhs.vercel.app/api/${endpoint}`, {
+          method: "POST",
+          headers: { "x-cron-secret": process.env.IG_CRON_SECRET, "Content-Type": "application/json" },
+          body: JSON.stringify({ post_id: requeue }),
+        }).then((x) => x.json());
+        const hit = r.results?.[0];
+        if (!hit) return "沒有需要重發的";
+        return hit.ok ? "已重新發佈" : "重發失敗：" + String(hit.error).slice(0, 200);
+      } catch (e) {
+        return "重發沒跑完，排程會再試：" + String(e.message).slice(0, 150);
+      }
+    };
+    const [ig, th] = await Promise.all([republish("ig-publish"), republish("threads-publish")]);
+    return res.json({ requeue, cleared, IG: ig, Threads: th });
   }
 
   try {

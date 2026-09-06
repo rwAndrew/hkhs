@@ -99,6 +99,8 @@ const DB = (() => {
 
     // ---------- 版主登入 ----------
     isMod: async () => ready && !!(await client.auth.getSession()).data.session,
+    // 給需要後端驗身分的管理功能用（例如社群同步狀態，那些表前端讀不到）
+    sessionToken: async () => ready ? (await client.auth.getSession()).data.session?.access_token : null,
     signIn: (email, password) => client.auth.signInWithPassword({ email, password }),
     signOut: () => client.auth.signOut(),
 

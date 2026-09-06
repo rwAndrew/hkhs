@@ -119,9 +119,56 @@
       </div>`;
     }
 
+    // 社群同步狀態要讀 ig_published / threads_published，那兩張表前端讀不到（RLS 擋著），
+    // 所以走後端端點，用版主登入後的 token 認身分。
+    async function fetchSync(params) {
+      const token = (await DB.sessionToken()) || "";
+      const r = await fetch(`/api/sync-status?${params}`, { headers: { Authorization: "Bearer " + token } });
+      if (!r.ok) throw new Error("sync-status " + r.status);
+      return r.json();
+    }
+
     async function loadDashboard() {
       const [stats, queue] = await Promise.all([DB.loadDashboardStats(), DB.loadReportQueue()]);
       renderDashboard(stats, queue);
+      loadSyncPanel();   // 這塊要打外部 API，慢一點，讓它自己載入不要卡住整頁
+    }
+
+    function syncBadge(text) {
+      if (text.startsWith("已發佈")) return `<span class="sync-ok">✓ 已發佈</span>`;
+      if (text.startsWith("沒有紀錄")) return `<span class="sync-wait">⏳ 等待中</span>`;
+      return `<span class="sync-bad">✕ 失敗</span>`;
+    }
+
+    async function loadSyncPanel() {
+      const box = $("sync-body");
+      if (!box) return;
+      try {
+        const data = await fetchSync("n=8");
+        const rows = data.posts.map((p) => {
+          const bad = !p.IG.startsWith("已發佈") || !p.Threads.startsWith("已發佈");
+          const err = [
+            p.IG.startsWith("已發佈") || p.IG.startsWith("沒有紀錄") ? "" : "IG：" + p.IG,
+            p.Threads.startsWith("已發佈") || p.Threads.startsWith("沒有紀錄") ? "" : "Threads：" + p.Threads,
+          ].filter(Boolean).join("\n");
+          return `<div class="sync-row">
+            <div class="sync-row-head">
+              <a href="index.html#post/${p.id}">#${p.id} ${esc((p.title || "").slice(0, 18))}</a>
+              ${p.hidden ? `<span class="sync-wait">已隱藏</span>` : ""}
+            </div>
+            <div class="sync-row-state">
+              <span>IG ${syncBadge(p.IG)}</span>
+              <span>Threads ${syncBadge(p.Threads)}</span>
+              ${bad ? `<button class="text-btn" data-requeue="${p.id}">重新發佈</button>` : ""}
+            </div>
+            ${err ? `<pre class="sync-err">${esc(err)}</pre>` : ""}
+          </div>`;
+        }).join("");
+        box.innerHTML = rows || `<p class="dash-empty-hint">還沒有貼文</p>`;
+      } catch (e) {
+        box.innerHTML = `<p class="dash-empty-hint">讀不到同步狀態（${esc(e.message)}）</p>`;
+        console.error(e);
+      }
     }
 
     function renderDashboard(stats, queue) {
@@ -164,6 +211,12 @@
         </section>
 
         <section class="dash-section">
+          <h2 class="dash-section-title">社群同步</h2>
+          <p class="dash-section-hint">每篇貼文會自動發到 IG 和 Threads。失敗的會在這裡標出原因，按「重新發佈」可以重試。</p>
+          <div id="sync-body"><p class="dash-empty-hint">載入中…</p></div>
+        </section>
+
+        <section class="dash-section">
           <h2 class="dash-section-title">其他管理</h2>
           <div class="dash-links">
             <a class="dash-link-card" href="index.html#tab-boards">
@@ -180,6 +233,20 @@
     }
 
     document.addEventListener("click", async (e) => {
+      const requeue = e.target.closest("[data-requeue]");
+      if (requeue) {
+        requeue.disabled = true;
+        requeue.textContent = "發佈中…";
+        try {
+          const r = await fetchSync(`requeue=${requeue.dataset.requeue}`);
+          toast(`IG：${r.IG}／Threads：${r.Threads}`);
+        } catch (err) {
+          toast("重新發佈失敗");
+          console.error(err);
+        }
+        loadSyncPanel();
+        return;
+      }
       const restorePost = e.target.closest("[data-restore-post]");
       if (restorePost) {
         await DB.updatePost(+restorePost.dataset.restorePost, { hidden: false, report_count: 0 });

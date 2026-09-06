@@ -921,6 +921,22 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .dash-section-hint { font-size: 12.5px; color: var(--text-3); margin-bottom: 12px; }
 .dash-empty-hint { font-size: 13px; color: var(--text-3); }
 
+/* 社群同步狀態 */
+.sync-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sync-row:last-child { border-bottom: 0; }
+.sync-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sync-row-head a { font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; }
+.sync-row-state { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text-3); }
+.sync-ok   { color: var(--primary); font-weight: 600; }
+.sync-bad  { color: #E5484D; font-weight: 600; }
+.sync-wait { color: var(--text-3); }
+.sync-err {
+  margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+  background: var(--surface-2); color: var(--text-2);
+  font-size: 11.5px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-all;
+}
+
 .board-bar-list {
   background: var(--surface);
   border-radius: var(--r-lg);
