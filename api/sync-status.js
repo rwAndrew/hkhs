@@ -5,6 +5,9 @@
 //
 //   GET /api/sync-status?secret=…        最近 10 篇
 //   GET /api/sync-status?secret=…&n=30   最近 30 篇
+//   GET /api/sync-status?secret=…&probe=1  另外拿兩邊的 token 各打一次讀取 API，
+//                                          用來分辨「整個 App 被擋」還是「只有發佈被擋」
+//                                          （只回傳 Meta 的回應，不會吐出 token）
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -42,8 +45,29 @@ export default async function handler(req, res) {
       return `${r.status}（第 ${r.attempts} 次）${r.last_error ? " → " + r.last_error : ""}`;
     };
 
+    let probe;
+    if (req.query?.probe) {
+      const [igCfg, thCfg] = await Promise.all([
+        sbGet("ig_config?id=eq.1&select=access_token"),
+        sbGet("threads_config?id=eq.1&select=access_token"),
+      ]);
+      const ping = async (url, token) => {
+        if (!token) return "沒有 token";
+        try {
+          return await fetch(`${url}&access_token=${encodeURIComponent(token)}`).then((r) => r.json());
+        } catch (e) {
+          return String(e.message).slice(0, 200);
+        }
+      };
+      probe = {
+        IG: await ping("https://graph.instagram.com/me?fields=id,username", igCfg[0]?.access_token),
+        Threads: await ping("https://graph.threads.net/v1.0/me?fields=id,username", thCfg[0]?.access_token),
+      };
+    }
+
     return res.json({
       now: new Date().toISOString(),
+      probe,
       posts: posts.map((p) => ({
         id: p.id,
         title: p.title || "(無標題)",
