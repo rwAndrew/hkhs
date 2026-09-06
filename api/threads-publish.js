@@ -59,7 +59,7 @@ async function waitUntilFinished(creationId, token) {
 
 function buildCaption(p) {
   const body = (p.body || "").replace(/\s+/g, " ").trim();
-  const tail = `\n\n💬 完整討論與留言 → ${SITE.replace("https://", "")}/p/${p.id}\n\n#港討 #小港高中`;
+  const tail = `\n\n💬 完整討論與留言 → ${SITE.replace("https://", "")}/p/${p.id}\n\n#小港高中 #港討`;
   const budget = TEXT_LIMIT - tail.length - (p.title ? p.title.length + 2 : 0);
   const text = p.title ? `${p.title}\n\n${excerpt(body, Math.max(budget, 0))}` : excerpt(body, Math.max(TEXT_LIMIT - tail.length, 0));
   return `${text}${tail}`;

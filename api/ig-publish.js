@@ -67,7 +67,7 @@ async function waitUntilFinished(creationId, token) {
 function buildCaption(p) {
   const body = (p.body || "").replace(/\s+/g, " ").trim();
   const text = p.title ? `${p.title}\n\n${body.slice(0, 300)}` : body.slice(0, 300);
-  return `${text}\n\n💬 完整討論與留言 → ${SITE.replace("https://", "")}/p/${p.id}\n\n#港討 #小港高中 #匿名討論區`;
+  return `${text}\n\n💬 完整討論與留言 → ${SITE.replace("https://", "")}/p/${p.id}\n\n#小港高中 #港討 #匿名討論區`;
 }
 
 export default async function handler(req, res) {
