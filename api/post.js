@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   const id = req.query.id;
   const post = await fetchPost(id);
 
-  const fallbackTitle = "港討 HKHS — 小港高中匿名討論區";
+  const fallbackTitle = "小港高中匿名討論區 — 港討 HKHS";
   const fallbackDesc = "專屬小港高中學生的匿名討論區，發文即時、留言即時、貼文可搜尋。";
   const appUrl = post ? `${origin}/#post/${id}` : `${origin}/`;
 
