@@ -5,6 +5,7 @@
 // 差異只在 API 端點是 graph.threads.net，欄位命名和發文字數上限不同。
 
 import { fetchPost, fetchCommentCount, fetchBoardLabel, excerpt } from "../lib/post-data.js";
+import { imageUrl, warmImage } from "../lib/social-image.js";
 
 const GRAPH = "https://graph.threads.net/v1.0";
 const SITE = "https://hkhs.vercel.app";
@@ -130,8 +131,8 @@ export default async function handler(req, res) {
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
     try {
-      const pngUrl = `${SITE}/api/og?id=${p.id}&format=post`;
-      const jpgUrl = `https://images.weserv.nl/?url=${encodeURIComponent(pngUrl)}&output=jpg&q=88`;
+      const jpgUrl = imageUrl(p.id);
+      await warmImage(jpgUrl);
 
       const create = await graph(userId + "/threads", {
         media_type: "IMAGE",

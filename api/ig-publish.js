@@ -13,6 +13,8 @@
 //   4. 用現成的 /api/og 產圖（經 weserv 轉成 IG 要求的 JPEG）→ 發佈
 //   5. 成功／失敗都記錄在 ig_published，失敗的下輪重試（最多 5 次）
 
+import { imageUrl, warmImage } from "../lib/social-image.js";
+
 const GRAPH = "https://graph.instagram.com";
 const SITE = "https://hkhs.vercel.app";
 const MAX_ATTEMPTS = 5;
@@ -136,10 +138,10 @@ export default async function handler(req, res) {
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
     try {
-      // IG 只收 JPEG。post 格式是 3:4，比 IG 上限 4:5 更瘦長，IG 發佈時會置中
-      // 裁掉多餘的上下（api/og.js 的 postLayout 已經把版面留在安全範圍內）
-      const pngUrl = `${SITE}/api/og?id=${p.id}&format=post`;
-      const jpgUrl = `https://images.weserv.nl/?url=${encodeURIComponent(pngUrl)}&output=jpg&q=88`;
+      // post 格式是 3:4，比 IG 上限 4:5 更瘦長，IG 發佈時會置中裁掉多餘的上下
+      //（api/og.js 的 postLayout 已經把版面留在安全範圍內）
+      const jpgUrl = imageUrl(p.id);
+      await warmImage(jpgUrl);
 
       const create = await graph(`v21.0/${igUserId}/media`, {
         image_url: jpgUrl,
