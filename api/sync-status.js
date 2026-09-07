@@ -63,7 +63,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({ post_id: requeue }),
         }).then((x) => x.json());
         const hit = r.results?.[0];
-        if (!hit) return "沒有需要重發的";
+        if (!hit) return r.reason || "沒有需要重發的";
         return hit.ok ? "已重新發佈" : "重發失敗：" + String(hit.error).slice(0, 200);
       } catch (e) {
         return "重發沒跑完，排程會再試：" + String(e.message).slice(0, 150);

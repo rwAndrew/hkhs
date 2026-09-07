@@ -29,6 +29,11 @@ const PUBLISH_DELAY_MS = 3 * 60e3;
 // 處理能力）早就遠遠超過每日額度了。Threads 額度寬鬆，那邊維持 3 篇。
 const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
+// 兩篇 IG 貼文之間至少隔這麼久。IG 除了每日 100 篇的總量，還有一套獨立的
+// 「發太快」節流（code 9 / subcode 2207042，訊息是 User is performing too
+// many actions），實測每分鐘 1 篇就會踩到。每 5 分鐘 1 篇 = 一天 288 篇的
+// 處理能力，本來就遠超過每日 100 篇的上限，不會變成瓶頸。
+const MIN_GAP_MS = 5 * 60e3;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -140,6 +145,18 @@ export default async function handler(req, res) {
     .slice(0, PER_RUN_LIMIT);
 
   // ---- 逐篇發佈 ----
+  // IG 有發文速度節流，兩篇之間要隔開，不然會被擋而且越擋越久。
+  // 即時觸發也一樣要等——IG 在有流量的情況下本來就不可能做到即時同步，
+  // 硬發只會被節流擋掉，反而更慢。等間隔到了排程會接手發。
+  const lastAt = done
+    .filter((d) => d.status === "published" && d.published_at)
+    .reduce((max, d) => Math.max(max, Date.parse(d.published_at) || 0), 0);
+  const waitMs = lastAt + MIN_GAP_MS - Date.now();
+  if (waitMs > 0) {
+    return res.json({ ok: true, checked: posts.length, queued: 0, results: [],
+      reason: `距離上一篇 IG 貼文還不到 ${Math.round(MIN_GAP_MS / 60e3)} 分鐘，還要等 ${Math.ceil(waitMs / 60e3)} 分鐘` });
+  }
+
   // 先問清楚今天還能發幾篇。額度滿了就整輪收工——硬發只會換來一堆失敗紀錄，
   // 還會把重試次數燒光，隔天額度重置反而沒人補發。
   let remaining = Infinity;
