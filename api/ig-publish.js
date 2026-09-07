@@ -155,11 +155,11 @@ export default async function handler(req, res) {
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
   // 從舊到新發，社群上的順序才跟站上一致
-  const pendingIds = candidates
+  const allPending = candidates
     .filter((c) => isPending(doneMap.get(c.id), MAX_ATTEMPTS))
     .map((c) => c.id)
-    .sort((a, b) => a - b)
-    .slice(0, PER_RUN_LIMIT);
+    .sort((a, b) => a - b);
+  const pendingIds = allPending.slice(0, PER_RUN_LIMIT);
   const queue = pendingIds.length
     ? (await sbGet(`posts?id=in.(${pendingIds.join(",")})&select=id,title,body,board,created_at`))
         .sort((a, b) => a.id - b.id)
@@ -196,8 +196,8 @@ export default async function handler(req, res) {
   }
 
   if (dry) {
-    return res.json({ dry: true, checked: candidates.length, queued: queue.length,
-      ids: queue.map((p) => p.id), remaining });
+    return res.json({ dry: true, checked: candidates.length, backlog: allPending.length,
+      queued: queue.length, ids: queue.map((p) => p.id), remaining });
   }
 
   const results = [];
