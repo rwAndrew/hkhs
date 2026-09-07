@@ -109,6 +109,9 @@ export default async function handler(req, res) {
       probe = {
         IG: await ping("https://graph.instagram.com/me?fields=id,username", igCfg[0]?.access_token),
         Threads: await ping("https://graph.threads.net/v1.0/me?fields=id,username", thCfg[0]?.access_token),
+        // 兩邊都有每日發文額度，積壓時要知道是「還沒輪到」還是「今天發滿了」
+        IG額度: await ping("https://graph.instagram.com/me/content_publishing_limit?fields=config,quota_usage", igCfg[0]?.access_token),
+        Threads額度: await ping("https://graph.threads.net/v1.0/me/threads_publishing_limit?fields=config,quota_usage", thCfg[0]?.access_token),
       };
     }
 

@@ -23,8 +23,10 @@ const MAX_ATTEMPTS = 5;
 // 這個時間差也讓定時任務不會跟 trigger 撞在一起重複發佈——trigger 那一輪
 // 最久也只跑約 50 秒，早就寫完紀錄了，定時任務才會看到這篇。
 const PUBLISH_DELAY_MS = 3 * 60e3;
-const PER_RUN_LIMIT = 1;   // 每輪最多發 1 篇：等圖片處理完成最多要 45 秒，
-                            // 配合 60 秒函式逾時上限，一輪處理多篇會有超時風險
+// 一輪最多發 3 篇，用來消化積壓；下面還有時間預算把關，快逾時就收工，
+// 沒發完的下一輪會接著發，不會卡死整個函式
+const PER_RUN_LIMIT = 3;
+const RUN_BUDGET_MS = 45e3;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -120,19 +122,24 @@ export default async function handler(req, res) {
   const [posts, done] = await Promise.all([
     only
       ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
-      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.asc&select=id,title,body,board,created_at&limit=50`),
+      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.desc&select=id,title,body,board,created_at&limit=60`),
     only
       ? sbGet(`ig_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
       : sbGet("ig_published?select=post_id,status,attempts,published_at"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
+  // 取回來的是最新的 60 篇（不能取最舊的——貼文數超過上限之後，新貼文就永遠
+  // 排不進來了），挑出還沒處理的，再從舊到新發，社群上的順序才跟站上一致。
   const queue = posts
     .filter((p) => isPending(doneMap.get(p.id), MAX_ATTEMPTS))
+    .sort((a, b) => a.id - b.id)
     .slice(0, PER_RUN_LIMIT);
 
   // ---- 逐篇發佈 ----
   const results = [];
+  const deadline = Date.now() + RUN_BUDGET_MS;
   for (const p of queue) {
+    if (Date.now() > deadline) break;   // 快逾時了，剩下的留給下一輪
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
     // 搶不到代表另一輪（排程或即時觸發）正在發這一篇，跳過才不會重複發文
