@@ -89,6 +89,11 @@ async function renderIntoApp(origin, { headTags, article }) {
   }
   if (!html.includes('<div id="app">')) return null;   // 版型變了就別亂改
 
+  // index.html 裡的資源都是相對路徑（style.css、app.js…）。這頁的網址是
+  // /p/123，相對路徑會被解析成 /p/style.css 而全部 404，整頁只剩沒有樣式的
+  // 骨架。加一個 base 讓相對路徑一律從根目錄算起。
+  html = html.replace(/<head>/i, '<head>\n<base href="/">');
+
   // 拿掉原本的標題／描述／社群預覽標籤，換成這篇貼文的
   html = html
     .replace(/<title>[\s\S]*?<\/title>\s*/i, "")
