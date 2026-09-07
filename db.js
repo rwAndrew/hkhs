@@ -70,6 +70,18 @@ const DB = (() => {
     return data.map((r) => mapPost(r, liked));
   }
 
+  // 單篇讀取：從 /p/123 或 #post/123 進站時，那篇可能不在第一頁的貼文裡
+  // （首頁只載入最新一批），沒有這個的話舊貼文的分享連結會開出空白
+  async function loadPost(id) {
+    const { data, error } = await client
+      .from("posts")
+      .select("*, comments(*)")
+      .eq("id", id)
+      .limit(1);
+    if (error) throw error;
+    return data[0] ? mapPost(data[0], likedSet()) : null;
+  }
+
   // 全站搜尋：標題、內文、留言（中文用子字串比對即可，不需斷詞）
   async function searchPosts(kw) {
     const safe = kw.replace(/[%_,().]/g, " ").trim();
@@ -116,6 +128,7 @@ const DB = (() => {
       return data.map((s) => ({ id: s.id, emoji: s.emoji, title: s.title, text: s.body }));
     },
     loadPosts,
+    loadPost,
     searchPosts,
 
     // ---------- 匿名寫入（走資料庫函式，規則在伺服器端） ----------

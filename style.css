@@ -922,6 +922,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .dash-empty-hint { font-size: 13px; color: var(--text-3); }
 
 /* ============ 單篇貼文頁（/p/123，給搜尋引擎與外部連結） ============ */
+/* 伺服器預先渲染的那份內容，版面要跟主站一致；app.js 開機後會把它移除 */
+#prerender { max-width: 520px; margin: 0 auto; }
+
 .seo-body { font-size: 15.5px; color: var(--text); overflow-wrap: anywhere; }
 .seo-body p { margin-bottom: 10px; }
 .seo-body p:last-child { margin-bottom: 0; }

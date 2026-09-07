@@ -7,8 +7,13 @@
 //
 // 這頁以前是「印一組 OG 標籤然後立刻轉址回主站」。對搜尋引擎來說那等於
 // 一個沒有內容的轉址頁：Google 會把它併到首頁，全站幾百篇貼文只會被當成
-// 同一個網址，等於完全沒被索引。所以改成直接把貼文和留言渲染出來，
-// 不轉址——使用者點進來就能讀，要參與討論再進主站。
+// 同一個網址，等於完全沒被索引。
+//
+// 做法：回傳的就是主站本身（index.html），只是換掉標題那些標籤，並且把
+// 這篇貼文預先渲染進去。爬蟲不跑 JS 也讀得到完整內容；真人這邊 app.js
+// 一開機就把預渲染換成正常的站內詳情頁，可以直接按讚留言、往下滑，
+// 跟從站內點進去完全一樣，不用多按一次「開啟討論」。
+// 兩者拿到的是同一份 HTML、同一份內容，不是給爬蟲看另一套。
 
 import { fetchPost, fetchComments, fetchBoardLabel, excerpt } from "../lib/post-data.js";
 
@@ -68,6 +73,38 @@ ${extraHead}
 </script>
 </body>
 </html>`;
+}
+
+// 把主站的 index.html 拿來，換掉會影響預覽與搜尋結果的標籤，
+// 再把預先渲染好的貼文插進去。抓不到（部署中、網路異常）就回傳 null，
+// 呼叫端會退回獨立頁面，至少連結預覽和內容不會壞掉。
+async function renderIntoApp(origin, { headTags, article }) {
+  let html;
+  try {
+    const r = await fetch(`${origin}/index.html`);
+    if (!r.ok) return null;
+    html = await r.text();
+  } catch {
+    return null;
+  }
+  if (!html.includes('<div id="app">')) return null;   // 版型變了就別亂改
+
+  // 拿掉原本的標題／描述／社群預覽標籤，換成這篇貼文的
+  html = html
+    .replace(/<title>[\s\S]*?<\/title>\s*/i, "")
+    .replace(/<meta\s+name="description"[^>]*>\s*/i, "")
+    .replace(/<link\s+rel="canonical"[^>]*>\s*/i, "")
+    .replace(/<meta\s+property="og:[^>]*>\s*/gi, "")
+    .replace(/<meta\s+name="twitter:[^>]*>\s*/gi, "")
+    .replace("</head>", `${headTags}\n</head>`);
+
+  // 預渲染放在 #app 前面，並先把 #app 藏起來：JS 還沒跑完的時候
+  // （或者根本沒有 JS）看到的就是這篇貼文，而不是空白的骨架。
+  return html.replace(
+    '<div id="app">',
+    `<style id="prerender-style">#app{display:none}</style>\n` +
+    `<div id="prerender">${article}</div>\n<div id="app">`
+  );
 }
 
 export default async function handler(req, res) {
@@ -138,14 +175,23 @@ export default async function handler(req, res) {
       </article>`).join("\n")
     : `<p class="dash-empty-hint">還沒有人留言</p>`;
 
-  // 貼文刪除／隱藏後要盡快從搜尋結果消失，但也不能每次都重新產生（爬蟲會很頻繁），
-  // 所以讓 CDN 快取一分鐘就好
-  res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60, stale-while-revalidate=60");
-  res.status(200).send(shell({
-    title, description, canonical,
-    image: `${origin}/api/og?id=${post.id}&format=card`,
-    extraHead: `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
-    body: `
+  const image = `${origin}/api/og?id=${post.id}&format=card`;
+  const headTags = `<title>${esc(title)}</title>
+<meta name="description" content="${esc(description)}">
+<link rel="canonical" href="${esc(canonical)}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="港討 HKHS">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:image" content="${esc(image)}">
+<meta property="og:url" content="${esc(canonical)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${esc(image)}">
+<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`;
+
+  const article = `
       <header class="topbar">
         <div class="topbar-inner">
           <a class="brand" href="/" style="text-decoration:none;color:inherit">
@@ -176,16 +222,25 @@ export default async function handler(req, res) {
           </div>
         </article>
 
-        <p style="text-align:center;margin:4px 0 8px">
-          <a class="seo-cta" href="/#post/${post.id}">在港討開啟這篇討論 →</a>
-        </p>
-
         <h2 class="feed-section-title">留言（${comments.length}）</h2>
         ${commentsHtml}
 
-        <p style="text-align:center;margin-top:24px">
-          <a class="seo-back" href="/">回到港討首頁</a>
+        <p style="text-align:center;margin:20px 0">
+          <a class="seo-cta" href="/#post/${post.id}">在港討開啟這篇討論 →</a>
         </p>
-      </main>`,
+      </main>`;
+
+  // 貼文刪除／隱藏後要盡快從搜尋結果消失，但也不能每次都重新產生（爬蟲會很頻繁），
+  // 所以讓 CDN 快取一分鐘就好
+  res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60, stale-while-revalidate=60");
+
+  const full = await renderIntoApp(origin, { headTags, article });
+  if (full) return res.status(200).send(full);
+
+  // 退路：抓不到主站就給獨立頁面。內容一樣完整，只是要多按一次才能互動。
+  return res.status(200).send(shell({
+    title, description, canonical, image,
+    extraHead: `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
+    body: article + `<p style="text-align:center;margin-top:8px"><a class="seo-back" href="/">回到港討首頁</a></p>`,
   }));
 }

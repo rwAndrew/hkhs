@@ -713,7 +713,7 @@ $("search-clear").addEventListener("click", () => {
 });
 
 // 詳情頁：hash 路由（#post/123 可直接分享、支援返回鍵；#tab-boards / #tab-about 是管理後台的深連結）
-function syncFromHash() {
+async function syncFromHash() {
   const tabMatch = location.hash.match(/^#tab-(boards|about|hot|home)$/);
   if (tabMatch) {
     state.tab = tabMatch[1];
@@ -724,7 +724,15 @@ function syncFromHash() {
 
   const m = location.hash.match(/^#post\/(\d+)$/);
   if (m) {
-    const p = POSTS.find((x) => x.id === +m[1]);
+    const id = +m[1];
+    let p = POSTS.find((x) => x.id === id);
+    // 首頁只載入最新一批，從分享連結或搜尋結果進來的舊貼文不在裡面，補撈一次
+    if (!p && DB.ready) {
+      try {
+        const fetched = await DB.loadPost(id);
+        if (fetched) { POSTS.push(fetched); p = fetched; }
+      } catch (e) { console.error("港討：讀取貼文失敗", e); }
+    }
     if (p && (IS_MOD || !p.hidden)) {
       state.openPostId = p.id;
       state.commentAnon = randAnon();
@@ -743,7 +751,8 @@ $("btn-back").addEventListener("click", () => {
   else { $("detail-page").hidden = true; state.openPostId = null; }
 });
 
-// 分享貼文連結：走 /p/id（伺服器端會回傳含標題縮圖的預覽，真人點擊自動跳回站內）
+// 分享貼文連結：走 /p/id（伺服器端回傳的就是主站，並且已經把那篇貼文預先渲染好，
+// 所以連結預覽有標題縮圖，真人點進去也直接是站內詳情頁）
 // 手機優先用原生分享面板，其次複製到剪貼簿
 $("btn-share").addEventListener("click", async () => {
   const url = location.origin + "/p/" + state.openPostId;
@@ -994,6 +1003,19 @@ async function init() {
   initModUI();
   renderChips();
   renderFeed();
-  syncFromHash();   // 支援直接開啟 #post/123 分享連結
+
+  // 從 /p/123 進站（IG／Threads 的連結、Google 搜尋結果都是這個網址）：
+  // 伺服器已經把那篇貼文預先渲染在頁面上，讓沒有 JS 的爬蟲也讀得到。
+  // 這裡把它換成正常的站內詳情頁，使用者就能直接按讚留言、往下滑其他貼文，
+  // 不用多點一次「開啟討論」。
+  const fromPath = location.pathname.match(/^\/p\/(\d+)$/);
+  if (fromPath) history.replaceState(null, "", "/#post/" + fromPath[1]);
+
+  await syncFromHash();   // 支援直接開啟 #post/123 分享連結
+
+  if (fromPath) {
+    document.getElementById("prerender")?.remove();
+    document.getElementById("prerender-style")?.remove();
+  }
 }
 init();
