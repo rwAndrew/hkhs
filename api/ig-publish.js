@@ -23,20 +23,21 @@ const MAX_ATTEMPTS = 5;
 // 這個時間差也讓定時任務不會跟 trigger 撞在一起重複發佈——trigger 那一輪
 // 最久也只跑約 50 秒，早就寫完紀錄了，定時任務才會看到這篇。
 const PUBLISH_DELAY_MS = 3 * 60e3;
-// IG 一輪只發 1 篇。一分鐘 3 篇會撞到 IG 的瞬時速率限制
-//（"User is performing too many actions"），而且撞了也沒好處：
-// IG 每天上限 100 篇，平均約 14 分鐘才輪到一篇，每分鐘 1 篇（一天 1440 篇的
-// 處理能力）早就遠遠超過每日額度了。Threads 額度寬鬆，那邊維持 3 篇。
+// IG 一輪只發 1 篇，且兩篇之間隔很久（見下方 MIN_GAP_MS）。
+// Threads 額度寬鬆，那邊維持 3 篇。
 const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
-// 兩篇 IG 貼文之間至少隔這麼久。IG 除了每日 100 篇的總量，還有一套獨立的
-// 「發太快」節流（code 9 / subcode 2207042，訊息是 User is performing too
-// many actions），實測每分鐘 1 篇會踩到，5 分鐘也還是會。
+// 兩篇 IG 貼文之間至少隔這麼久。
 //
-// 8 分鐘是算出來的：發文時段 07:00-20:00 共 13 小時 = 780 分鐘，除以每日
-// 上限 100 篇，剛好每 7.8 分鐘一篇。也就是說用這個節奏剛好能把一天的額度
-// 平均用完，再快也沒有意義——快發只會撞節流，反而更慢。
-const MIN_GAP_MS = 8 * 60e3;
+// IG 的 content_publishing_limit 回報上限 100 篇／天，但那個數字不可信：
+// 2026/09/07 實測發到第 51 篇之後，接下來連續 33 次全部被擋
+// （code 9 / subcode 2207042，"User is performing too many actions"），
+// 而額度用量就停在 51 不再增加。8 分鐘、5 分鐘、1 分鐘的間隔都一樣被擋，
+// 所以那不是「發太快」，是這個帳號一天大概就只能發 50 篇左右。
+//
+// 15 分鐘 = 發文時段 780 分鐘 ÷ 52 篇，貼合實測到的真實上限。
+// 發更快沒有意義，只會製造一堆失敗紀錄。
+const MIN_GAP_MS = 15 * 60e3;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -138,23 +139,27 @@ export default async function handler(req, res) {
   // 只收整數，避免帶進查詢字串的值被拿來拼接出別的查詢條件
   const only = Number.isInteger(Number(req.body?.post_id)) ? Number(req.body.post_id) : null;
   const cutoff = new Date(Date.now() - PUBLISH_DELAY_MS).toISOString();
-  const [posts, done] = await Promise.all([
+  // 先只撈編號，不撈內文——積壓大的時候視窗要開得夠寬才不會有貼文被擠出去
+  // 永遠輪不到，但連內文一起撈幾百篇會太肥。挑出要發的那幾篇之後再撈完整內容。
+  const [candidates, done] = await Promise.all([
     only
-      ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
-      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.desc&select=id,title,body,board,created_at&limit=200`),
+      ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id`)
+      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=id.desc&select=id&limit=1000`),
     only
       ? sbGet(`ig_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
-      : sbGet("ig_published?select=post_id,status,attempts,published_at&order=post_id.desc&limit=400"),
+      : sbGet("ig_published?select=post_id,status,attempts,published_at&order=post_id.desc&limit=1000"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
-  // 取回來的是最新的 200 篇（不能取最舊的——貼文數超過上限之後，新貼文就永遠
-  // 排不進來了），挑出還沒處理的，再從舊到新發，社群上的順序才跟站上一致。
-  // 視窗開到 200 是為了撐住尖峰：全校一天的量加上社群那邊的每日額度限制，
-  // 積壓有可能累積到上百篇。
-  const queue = posts
-    .filter((p) => isPending(doneMap.get(p.id), MAX_ATTEMPTS))
-    .sort((a, b) => a.id - b.id)
+  // 從舊到新發，社群上的順序才跟站上一致
+  const pendingIds = candidates
+    .filter((c) => isPending(doneMap.get(c.id), MAX_ATTEMPTS))
+    .map((c) => c.id)
+    .sort((a, b) => a - b)
     .slice(0, PER_RUN_LIMIT);
+  const queue = pendingIds.length
+    ? (await sbGet(`posts?id=in.(${pendingIds.join(",")})&select=id,title,body,board,created_at`))
+        .sort((a, b) => a.id - b.id)
+    : [];
 
   // ---- 逐篇發佈 ----
   // IG 有發文速度節流，兩篇之間要隔開，不然會被擋而且越擋越久。
@@ -167,7 +172,7 @@ export default async function handler(req, res) {
     .reduce((max, d) => Math.max(max, Date.parse(d.published_at) || 0), 0);
   const waitMs = lastAt + MIN_GAP_MS - Date.now();
   if (waitMs > 0) {
-    return res.json({ ok: true, checked: posts.length, queued: 0, results: [],
+    return res.json({ ok: true, checked: candidates.length, queued: 0, results: [],
       reason: `距離上一篇 IG 貼文還不到 ${Math.round(MIN_GAP_MS / 60e3)} 分鐘，還要等 ${Math.ceil(waitMs / 60e3)} 分鐘` });
   }
 
@@ -182,7 +187,7 @@ export default async function handler(req, res) {
     // 查不到就照常發，真的超額 Meta 會擋，下面有處理
   }
   if (remaining <= 0) {
-    return res.json({ ok: true, checked: posts.length, queued: 0, results: [],
+    return res.json({ ok: true, checked: candidates.length, queued: 0, results: [],
       reason: "今天的發文額度已用完，等額度重置後會自動繼續" });
   }
 
@@ -240,5 +245,5 @@ export default async function handler(req, res) {
     }
   }
 
-  res.json({ ok: true, checked: posts.length, queued: queue.length, results });
+  res.json({ ok: true, checked: candidates.length, queued: queue.length, results });
 }

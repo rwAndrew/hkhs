@@ -95,9 +95,15 @@ export default async function handler(req, res) {
     let probe;
     if (req.query?.probe) {
       const [igCfg, thCfg] = await Promise.all([
-        sbGet("ig_config?id=eq.1&select=access_token"),
-        sbGet("threads_config?id=eq.1&select=access_token"),
+        sbGet("ig_config?id=eq.1&select=access_token,refreshed_at"),
+        sbGet("threads_config?id=eq.1&select=access_token,refreshed_at"),
       ]);
+      // token 壽命 60 天、第 30 天自動續期。沒人看著的時候這是最容易
+      // 無聲失效的東西，所以把「幾天前換的」一起報出來。
+      const age = (iso) => {
+        const t = Date.parse(iso);
+        return t ? Math.floor((Date.now() - t) / 86400e3) + " 天前更新" : "沒有紀錄";
+      };
       const ping = async (url, token) => {
         if (!token) return "沒有 token";
         try {
@@ -110,6 +116,8 @@ export default async function handler(req, res) {
         IG: await ping("https://graph.instagram.com/me?fields=id,username", igCfg[0]?.access_token),
         Threads: await ping("https://graph.threads.net/v1.0/me?fields=id,username", thCfg[0]?.access_token),
         // 兩邊都有每日發文額度，積壓時要知道是「還沒輪到」還是「今天發滿了」
+        IG權杖: age(igCfg[0]?.refreshed_at),
+        Threads權杖: age(thCfg[0]?.refreshed_at),
         IG額度: await ping("https://graph.instagram.com/me/content_publishing_limit?fields=config,quota_usage", igCfg[0]?.access_token),
         Threads額度: await ping("https://graph.threads.net/v1.0/me/threads_publishing_limit?fields=config,quota_usage", thCfg[0]?.access_token),
       };
