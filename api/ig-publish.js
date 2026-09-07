@@ -160,15 +160,20 @@ export default async function handler(req, res) {
       : sbGet("ig_published?select=post_id,status,attempts,published_at&order=post_id.desc&limit=1000"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
-  // 從舊到新發，社群上的順序才跟站上一致
+  // IG 從新到舊發（Threads 那邊相反，是從舊到新）。
+  //
+  // 因為 IG 一天只能發 50 篇，而站上一天的量遠超過這個數字，永遠追不完。
+  // 從舊到新發的話，IG 上跑的會是好幾天前的內容，越拖越舊；從新到舊發，
+  // IG 永遠貼當天最新的貼文。代價是舊的積壓平常輪不到，但也不會消失——
+  // 哪天發文量少（假日、寒暑假），沒有新貼文可發時就會自動往回補。
   const allPending = candidates
     .filter((c) => isPending(doneMap.get(c.id), MAX_ATTEMPTS))
     .map((c) => c.id)
-    .sort((a, b) => a - b);
+    .sort((a, b) => b - a);
   const pendingIds = allPending.slice(0, PER_RUN_LIMIT);
   const queue = pendingIds.length
     ? (await sbGet(`posts?id=in.(${pendingIds.join(",")})&select=id,title,body,board,created_at`))
-        .sort((a, b) => a.id - b.id)
+        .sort((a, b) => b.id - a.id)
     : [];
 
   // ---- 逐篇發佈 ----
