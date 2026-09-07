@@ -23,9 +23,11 @@ const MAX_ATTEMPTS = 5;
 // 這個時間差也讓定時任務不會跟 trigger 撞在一起重複發佈——trigger 那一輪
 // 最久也只跑約 50 秒，早就寫完紀錄了，定時任務才會看到這篇。
 const PUBLISH_DELAY_MS = 3 * 60e3;
-// 一輪最多發 3 篇，用來消化積壓；下面還有時間預算把關，快逾時就收工，
-// 沒發完的下一輪會接著發，不會卡死整個函式
-const PER_RUN_LIMIT = 3;
+// IG 一輪只發 1 篇。一分鐘 3 篇會撞到 IG 的瞬時速率限制
+//（"User is performing too many actions"），而且撞了也沒好處：
+// IG 每天上限 100 篇，平均約 14 分鐘才輪到一篇，每分鐘 1 篇（一天 1440 篇的
+// 處理能力）早就遠遠超過每日額度了。Threads 額度寬鬆，那邊維持 3 篇。
+const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
 
 function sbHeaders() {
