@@ -14,7 +14,7 @@
 //   5. 成功／失敗都記錄在 ig_published，失敗的下輪重試（最多 5 次）
 
 import { imageUrl, warmImage } from "../lib/social-image.js";
-import { claim, isPending } from "../lib/publish-claim.js";
+import { claim, isPending, isQuotaError } from "../lib/publish-claim.js";
 
 const GRAPH = "https://graph.instagram.com";
 const SITE = "https://hkhs.vercel.app";
@@ -122,24 +122,42 @@ export default async function handler(req, res) {
   const [posts, done] = await Promise.all([
     only
       ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id,title,body,board,created_at`)
-      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.desc&select=id,title,body,board,created_at&limit=60`),
+      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=created_at.desc&select=id,title,body,board,created_at&limit=200`),
     only
       ? sbGet(`ig_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
-      : sbGet("ig_published?select=post_id,status,attempts,published_at"),
+      : sbGet("ig_published?select=post_id,status,attempts,published_at&order=post_id.desc&limit=400"),
   ]);
   const doneMap = new Map(done.map((d) => [d.post_id, d]));
-  // 取回來的是最新的 60 篇（不能取最舊的——貼文數超過上限之後，新貼文就永遠
+  // 取回來的是最新的 200 篇（不能取最舊的——貼文數超過上限之後，新貼文就永遠
   // 排不進來了），挑出還沒處理的，再從舊到新發，社群上的順序才跟站上一致。
+  // 視窗開到 200 是為了撐住尖峰：全校一天的量加上社群那邊的每日額度限制，
+  // 積壓有可能累積到上百篇。
   const queue = posts
     .filter((p) => isPending(doneMap.get(p.id), MAX_ATTEMPTS))
     .sort((a, b) => a.id - b.id)
     .slice(0, PER_RUN_LIMIT);
 
   // ---- 逐篇發佈 ----
+  // 先問清楚今天還能發幾篇。額度滿了就整輪收工——硬發只會換來一堆失敗紀錄，
+  // 還會把重試次數燒光，隔天額度重置反而沒人補發。
+  let remaining = Infinity;
+  try {
+    const q = await fetch(`https://graph.instagram.com/me/content_publishing_limit?fields=quota_usage,config&access_token=${encodeURIComponent(token)}`).then((x) => x.json());
+    const row = q.data?.[0];
+    if (row) remaining = (row.config?.quota_total ?? Infinity) - (row.quota_usage ?? 0);
+  } catch {
+    // 查不到就照常發，真的超額 Meta 會擋，下面有處理
+  }
+  if (remaining <= 0) {
+    return res.json({ ok: true, checked: posts.length, queued: 0, results: [],
+      reason: "今天的發文額度已用完，等額度重置後會自動繼續" });
+  }
+
   const results = [];
   const deadline = Date.now() + RUN_BUDGET_MS;
   for (const p of queue) {
     if (Date.now() > deadline) break;   // 快逾時了，剩下的留給下一輪
+    if (remaining <= 0) break;          // 這一輪把額度用完了
     const prev = doneMap.get(p.id);
     const attempts = (prev?.attempts || 0) + 1;
     // 搶不到代表另一輪（排程或即時觸發）正在發這一篇，跳過才不會重複發文
@@ -173,12 +191,19 @@ export default async function handler(req, res) {
       await sbWrite("ig_published", "POST", {
         post_id: p.id, ig_media_id: String(pub.id), status: "published", attempts,
       });
+      remaining--;
       results.push({ post: p.id, ok: true, ig_media_id: pub.id });
     } catch (e) {
+      // 額度不足不是這篇的錯，次數退回去，等額度重置後照樣會被撿起來重發
+      const quota = isQuotaError(e.message);
       await sbWrite("ig_published", "POST", {
-        post_id: p.id, status: "failed", attempts, last_error: String(e.message).slice(0, 500),
+        post_id: p.id,
+        status: "failed",
+        attempts: quota ? attempts - 1 : attempts,
+        last_error: String(e.message).slice(0, 500),
       }).catch(() => {});
-      results.push({ post: p.id, ok: false, error: String(e.message).slice(0, 300) });
+      results.push({ post: p.id, ok: false, quota, error: String(e.message).slice(0, 300) });
+      if (quota) { remaining = 0; break; }
     }
   }
 
