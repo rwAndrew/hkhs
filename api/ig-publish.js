@@ -196,7 +196,14 @@ export default async function handler(req, res) {
   }
 
   if (dry) {
+    // 重試次數用完的貼文不會再被撿起來，等於被默默放棄了。沒人看顧的時候
+    // 這種「安靜的失敗」最危險，所以試跑時一併點出來。
+    const stuck = candidates.filter((c) => {
+      const d = doneMap.get(c.id);
+      return d && d.status === "failed" && d.attempts >= MAX_ATTEMPTS;
+    }).map((c) => c.id);
     return res.json({ dry: true, checked: candidates.length, backlog: allPending.length,
+      stuck: stuck.length, stuckIds: stuck.slice(0, 20),
       queued: queue.length, ids: queue.map((p) => p.id), remaining });
   }
 
