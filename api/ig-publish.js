@@ -27,17 +27,20 @@ const PUBLISH_DELAY_MS = 3 * 60e3;
 // Threads 額度寬鬆，那邊維持 3 篇。
 const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
-// 兩篇 IG 貼文之間至少隔這麼久。
+// 兩篇 IG 貼文之間的間隔，會自己調整。
 //
-// IG 的 content_publishing_limit 回報上限 100 篇／天，但那個數字不可信：
-// 2026/09/07 實測發到第 51 篇之後，接下來連續 33 次全部被擋
-// （code 9 / subcode 2207042，"User is performing too many actions"），
-// 而額度用量就停在 51 不再增加。8 分鐘、5 分鐘、1 分鐘的間隔都一樣被擋，
-// 所以那不是「發太快」，是這個帳號一天大概就只能發 50 篇左右。
+// 起點 8 分鐘 = 發文時段 780 分鐘 ÷ 100 篇，也就是「把 API 回報的每日上限
+// 100 篇平均用完」的節奏。
 //
-// 15 分鐘 = 發文時段 780 分鐘 ÷ 52 篇，貼合實測到的真實上限。
-// 發更快沒有意義，只會製造一堆失敗紀錄。
-const MIN_GAP_MS = 15 * 60e3;
+// 為什麼要自動調整：09/07 實測發到第 51 篇後連續被擋（code 9 /
+// subcode 2207042），而額度用量停在 51 不動。這有兩種解釋——真實上限
+// 其實只有 50 篇，或者先前每分鐘連發把帳號惹毛了、而我每 8 分鐘再試一次
+// 讓那個懲罰一直續命。單看那天的資料分辨不出來，所以不寫死任何猜測：
+// 順利就維持 8 分鐘衝到 100 篇，連續失敗就自動退讓，成功後再自己收回來。
+const BASE_GAP_MS = 8 * 60e3;
+const MAX_GAP_MS = 60 * 60e3;
+// 只看最近這段時間的失敗。隔夜休息過後不該還揹著昨天的退讓。
+const STREAK_WINDOW_MS = 2 * 3600e3;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -174,10 +177,25 @@ export default async function handler(req, res) {
   const lastAt = done
     .filter((d) => d.published_at)
     .reduce((max, d) => Math.max(max, Date.parse(d.published_at) || 0), 0);
-  const waitMs = lastAt + MIN_GAP_MS - Date.now();
-  if (waitMs > 0) {
+
+  // 連續失敗幾次就等幾倍久（8 → 16 → 32 → 60 分鐘封頂），成功一次就歸零。
+  // 這樣不必事先猜 IG 的真實上限：發得順就維持 8 分鐘、一天約 100 篇，
+  // 被擋就自動退讓，也不會像昨天那樣一直戳它讓懲罰延長。
+  const recent = done
+    .filter((d) => d.published_at && Date.now() - Date.parse(d.published_at) < STREAK_WINDOW_MS)
+    .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
+  let streak = 0;
+  for (const d of recent) {
+    if (d.status === "failed") streak++;
+    else break;
+  }
+  const gapMs = Math.min(BASE_GAP_MS * 2 ** Math.min(streak, 3), MAX_GAP_MS);
+  const waitMs = lastAt + gapMs - Date.now();
+  if (!dry && waitMs > 0) {
     return res.json({ ok: true, checked: candidates.length, queued: 0, results: [],
-      reason: `距離上一篇 IG 貼文還不到 ${Math.round(MIN_GAP_MS / 60e3)} 分鐘，還要等 ${Math.ceil(waitMs / 60e3)} 分鐘` });
+      reason: `距離上一篇 IG 貼文還不到 ${Math.round(gapMs / 60e3)} 分鐘` +
+        (streak ? `（連續失敗 ${streak} 次，已自動放慢）` : "") +
+        `，還要等 ${Math.ceil(waitMs / 60e3)} 分鐘` });
   }
 
   // 先問清楚今天還能發幾篇。額度滿了就整輪收工——硬發只會換來一堆失敗紀錄，
@@ -204,6 +222,8 @@ export default async function handler(req, res) {
     }).map((c) => c.id);
     return res.json({ dry: true, checked: candidates.length, backlog: allPending.length,
       stuck: stuck.length, stuckIds: stuck.slice(0, 20),
+      間隔分鐘: Math.round(gapMs / 60e3), 連續失敗: streak,
+      還要等分鐘: Math.max(0, Math.ceil(waitMs / 60e3)),
       queued: queue.length, ids: queue.map((p) => p.id), remaining });
   }
 
