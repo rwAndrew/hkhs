@@ -938,6 +938,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
   box-shadow: 0 4px 12px rgba(20, 163, 168, 0.3);
 }
 
+.seo-back { color: var(--text-2); font-size: 13.5px; text-decoration: none; }
+.seo-back:hover { color: var(--primary); }
+
 .seo-comment {
   background: var(--surface);
   border-radius: var(--r-md);

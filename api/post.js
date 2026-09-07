@@ -93,7 +93,7 @@ export default async function handler(req, res) {
           <span class="emoji">🌊</span>
           <strong>找不到這篇貼文</strong>
           <p>它可能已經被刪除或隱藏了</p>
-          <p style="margin-top:16px"><a href="/">回到港討</a></p>
+          <p style="margin-top:16px"><a class="seo-back" href="/">回到港討</a></p>
         </div>
       </main>`,
     }));
@@ -184,7 +184,7 @@ export default async function handler(req, res) {
         ${commentsHtml}
 
         <p style="text-align:center;margin-top:24px">
-          <a href="/">回到港討首頁</a>
+          <a class="seo-back" href="/">回到港討首頁</a>
         </p>
       </main>`,
   }));
