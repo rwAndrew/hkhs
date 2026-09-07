@@ -6,7 +6,7 @@
 
 import { fetchPost, fetchCommentCount, fetchBoardLabel, excerpt } from "../lib/post-data.js";
 import { imageUrl, warmImage } from "../lib/social-image.js";
-import { claim, isPending, isQuotaError } from "../lib/publish-claim.js";
+import { claim, isPending, isQuotaError, withinPostingHours, postingHoursText } from "../lib/publish-claim.js";
 
 const GRAPH = "https://graph.threads.net/v1.0";
 const SITE = "https://hkhs.vercel.app";
@@ -72,6 +72,11 @@ function buildCaption(p) {
 export default async function handler(req, res) {
   if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
     return res.status(401).json({ error: "unauthorized" });
+  }
+  // 夜間不發文，晚上的貼文排隊等早上（額度留給上課時間）
+  if (!withinPostingHours()) {
+    return res.json({ ok: true, queued: 0, results: [],
+      reason: `現在不在發文時段（${postingHoursText}），貼文會排隊等時段開始` });
   }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY 還沒設定（Vercel 環境變數）" });
