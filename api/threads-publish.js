@@ -73,8 +73,12 @@ export default async function handler(req, res) {
   if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
     return res.status(401).json({ error: "unauthorized" });
   }
+  // ?dry=1：試跑。只回報「這一輪會發哪幾篇」，不會真的發文，也不佔額度。
+  // 用來在夜間或改完程式後驗證取件邏輯，不必等到發文時段才知道有沒有寫錯。
+  const dry = req.query?.dry === "1";
+
   // 夜間不發文，晚上的貼文排隊等早上（額度留給上課時間）
-  if (!withinPostingHours()) {
+  if (!dry && !withinPostingHours()) {
     return res.json({ ok: true, queued: 0, results: [],
       reason: `現在不在發文時段（${postingHoursText}），貼文會排隊等時段開始` });
   }
@@ -153,6 +157,11 @@ export default async function handler(req, res) {
   if (remaining <= 0) {
     return res.json({ ok: true, checked: candidates.length, queued: 0, results: [],
       reason: "今天的發文額度已用完，等額度重置後會自動繼續" });
+  }
+
+  if (dry) {
+    return res.json({ dry: true, checked: candidates.length, queued: queue.length,
+      ids: queue.map((p) => p.id), remaining });
   }
 
   const results = [];
