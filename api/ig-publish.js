@@ -31,9 +31,12 @@ const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
 // 兩篇 IG 貼文之間至少隔這麼久。IG 除了每日 100 篇的總量，還有一套獨立的
 // 「發太快」節流（code 9 / subcode 2207042，訊息是 User is performing too
-// many actions），實測每分鐘 1 篇就會踩到。每 5 分鐘 1 篇 = 一天 288 篇的
-// 處理能力，本來就遠超過每日 100 篇的上限，不會變成瓶頸。
-const MIN_GAP_MS = 5 * 60e3;
+// many actions），實測每分鐘 1 篇會踩到，5 分鐘也還是會。
+//
+// 8 分鐘是算出來的：發文時段 07:00-20:00 共 13 小時 = 780 分鐘，除以每日
+// 上限 100 篇，剛好每 7.8 分鐘一篇。也就是說用這個節奏剛好能把一天的額度
+// 平均用完，再快也沒有意義——快發只會撞節流，反而更慢。
+const MIN_GAP_MS = 8 * 60e3;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
