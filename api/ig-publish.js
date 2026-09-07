@@ -29,18 +29,21 @@ const PER_RUN_LIMIT = 1;
 const RUN_BUDGET_MS = 45e3;
 // 兩篇 IG 貼文之間的間隔，會自己調整。
 //
-// 起點 8 分鐘 = 發文時段 780 分鐘 ÷ 100 篇，也就是「把 API 回報的每日上限
-// 100 篇平均用完」的節奏。
-//
-// 為什麼要自動調整：09/07 實測發到第 51 篇後連續被擋（code 9 /
-// subcode 2207042），而額度用量停在 51 不動。這有兩種解釋——真實上限
-// 其實只有 50 篇，或者先前每分鐘連發把帳號惹毛了、而我每 8 分鐘再試一次
-// 讓那個懲罰一直續命。單看那天的資料分辨不出來，所以不寫死任何猜測：
-// 順利就維持 8 分鐘衝到 100 篇，連續失敗就自動退讓，成功後再自己收回來。
-const BASE_GAP_MS = 8 * 60e3;
+// 起點 15 分鐘 = 發文時段 780 分鐘 ÷ 52 篇，把一天的額度平均分散在整個
+// 發文時段，而不是早上衝完、下午整個下午都在撞牆。
+const BASE_GAP_MS = 15 * 60e3;
 const MAX_GAP_MS = 60 * 60e3;
 // 只看最近這段時間的失敗。隔夜休息過後不該還揹著昨天的退讓。
 const STREAK_WINDOW_MS = 2 * 3600e3;
+
+// IG 每 24 小時真正能發的篇數。
+//
+// 不能相信 Meta 的 content_publishing_limit——它回報上限 100，但 09/07 與
+// 09/08 兩天都在用量 50 出頭時就開始被擋，錯誤訊息是 Meta 自己寫的
+// 「You reached maximum number of posts that is allowed to be published by
+// Content Publishing API.」（error_subcode 2207042）。所以自己數自己發過
+// 幾篇，數到上限就停手，不要靠那個不準的回報去撞牆。
+const DAILY_CAP = 50;
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -178,9 +181,9 @@ export default async function handler(req, res) {
     .filter((d) => d.published_at)
     .reduce((max, d) => Math.max(max, Date.parse(d.published_at) || 0), 0);
 
-  // 連續失敗幾次就等幾倍久（8 → 16 → 32 → 60 分鐘封頂），成功一次就歸零。
-  // 這樣不必事先猜 IG 的真實上限：發得順就維持 8 分鐘、一天約 100 篇，
-  // 被擋就自動退讓，也不會像昨天那樣一直戳它讓懲罰延長。
+  // 連續失敗幾次就等幾倍久（15 → 30 → 60 分鐘封頂），成功一次就歸零。
+  // 上面的每日上限是主要防線，這是備援：萬一 IG 哪天又換了規則，
+  // 它會自己退讓，不會像 09/07 那樣每隔幾分鐘一直戳讓懲罰延長。
   const recent = done
     .filter((d) => d.published_at && Date.now() - Date.parse(d.published_at) < STREAK_WINDOW_MS)
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
@@ -196,6 +199,16 @@ export default async function handler(req, res) {
       reason: `距離上一篇 IG 貼文還不到 ${Math.round(gapMs / 60e3)} 分鐘` +
         (streak ? `（連續失敗 ${streak} 次，已自動放慢）` : "") +
         `，還要等 ${Math.ceil(waitMs / 60e3)} 分鐘` });
+  }
+
+  // 自己數過去 24 小時發成功幾篇。這比 Meta 回報的額度準（見 DAILY_CAP 說明）。
+  const publishedLast24h = done.filter((d) =>
+    d.status === "published" && d.published_at &&
+    Date.now() - Date.parse(d.published_at) < 86400e3
+  ).length;
+  if (!dry && publishedLast24h >= DAILY_CAP) {
+    return res.json({ ok: true, checked: candidates.length, queued: 0, results: [],
+      reason: `過去 24 小時已發 ${publishedLast24h} 篇，達到 IG 上限 ${DAILY_CAP} 篇，等額度滾動釋出後自動繼續` });
   }
 
   // 先問清楚今天還能發幾篇。額度滿了就整輪收工——硬發只會換來一堆失敗紀錄，
@@ -223,6 +236,7 @@ export default async function handler(req, res) {
     return res.json({ dry: true, checked: candidates.length, backlog: allPending.length,
       stuck: stuck.length, stuckIds: stuck.slice(0, 20),
       間隔分鐘: Math.round(gapMs / 60e3), 連續失敗: streak,
+      近24小時已發: publishedLast24h, 每日上限: DAILY_CAP,
       還要等分鐘: Math.max(0, Math.ceil(waitMs / 60e3)),
       queued: queue.length, ids: queue.map((p) => p.id), remaining });
   }
