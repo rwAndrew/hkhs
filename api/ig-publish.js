@@ -67,13 +67,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 超過 45 秒還沒好也放棄（下一輪 cron 會重試，不會卡住整個函式逾時）
 async function waitUntilFinished(creationId, token) {
   const deadline = Date.now() + 45e3;
+  let last;
   while (Date.now() < deadline) {
-    const r = await fetch(`${GRAPH}/${creationId}?fields=status_code&access_token=${encodeURIComponent(token)}`).then((x) => x.json());
+    // status 欄位帶著 IG 對這個容器的說明（例如圖片抓不到的原因），
+    // 只看 status_code 的話逾時錯誤裡什麼線索都沒有
+    const r = await fetch(`${GRAPH}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`).then((x) => x.json());
+    last = r;
     if (r.status_code === "FINISHED") return;
     if (r.status_code === "ERROR") throw new Error("media processing failed: " + JSON.stringify(r));
     await sleep(2500);
   }
-  throw new Error("media not ready after 45s, will retry next run");
+  throw new Error("media not ready after 45s: " + JSON.stringify(last));
 }
 
 function buildCaption(p) {
