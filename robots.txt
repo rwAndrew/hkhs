@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# 管理頁面不需要被收錄
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /api/
+
+Sitemap: https://hkhs.vercel.app/sitemap.xml

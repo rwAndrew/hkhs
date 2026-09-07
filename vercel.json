@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/p/:id", "destination": "/api/post?id=:id" }
+    { "source": "/p/:id", "destination": "/api/post?id=:id" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" }
   ],
   "functions": {
     "api/ig-publish.js": { "maxDuration": 60 },
