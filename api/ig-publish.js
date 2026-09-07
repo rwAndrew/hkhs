@@ -75,7 +75,7 @@ async function waitUntilFinished(creationId, token) {
     last = r;
     if (r.status_code === "FINISHED") return;
     if (r.status_code === "ERROR") throw new Error("media processing failed: " + JSON.stringify(r));
-    await sleep(2500);
+    await sleep(5000);   // 查太密會撞到 API 呼叫次數限制，反而讀不到狀態
   }
   throw new Error("media not ready after 45s: " + JSON.stringify(last));
 }
@@ -157,8 +157,10 @@ export default async function handler(req, res) {
   // IG 有發文速度節流，兩篇之間要隔開，不然會被擋而且越擋越久。
   // 即時觸發也一樣要等——IG 在有流量的情況下本來就不可能做到即時同步，
   // 硬發只會被節流擋掉，反而更慢。等間隔到了排程會接手發。
+  // 看的是「上次動到 IG 的時間」，成功失敗都算。只看成功的話，被限流擋掉時
+  // 每分鐘都會再試一次，反而讓限流一直續命。
   const lastAt = done
-    .filter((d) => d.status === "published" && d.published_at)
+    .filter((d) => d.published_at)
     .reduce((max, d) => Math.max(max, Date.parse(d.published_at) || 0), 0);
   const waitMs = lastAt + MIN_GAP_MS - Date.now();
   if (waitMs > 0) {
