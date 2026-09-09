@@ -956,6 +956,106 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 .seo-comment p { margin-bottom: 8px; }
 .seo-comment p:last-child { margin-bottom: 0; }
 
+.about-link { display: block; text-decoration: none; color: inherit; }
+.about-link:active { transform: scale(0.98); }
+
+/* ============ 版規頁（rules.html） ============ */
+/* 預設收合，畫面上只有四行標題；要看細節才點開 */
+.rules-intro {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.8;
+  padding: 4px 4px 6px;
+}
+
+.rule {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.rule > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.rule > summary::-webkit-details-marker { display: none; }
+.rule > summary::after {
+  content: "▸";
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: 400;
+  transition: transform 0.15s;
+}
+.rule[open] > summary::after { transform: rotate(90deg); }
+.rule > summary:active { background: var(--surface-2); }
+
+.rule-no {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-full);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+[data-theme="dark"] .rule-no { color: var(--primary); }
+.rule-plain .rule-no { background: none; font-size: 17px; }
+
+.rule-body {
+  padding: 0 18px 16px;
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.8;
+}
+.rule-body p { margin-bottom: 10px; }
+.rule-body ul { margin: 0 0 10px 18px; }
+.rule-body li { margin-bottom: 6px; }
+.rule-body strong { color: var(--text); }
+.rule-body a { color: var(--primary); }
+
+.rules-foot {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 2;
+  margin-top: 10px;
+}
+
+/* 法律依據：規則裡再一層，預設也收起來 */
+.law { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 12px; }
+.law > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--primary);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.law > summary::-webkit-details-marker { display: none; }
+.law > summary::before { content: "▸"; transition: transform 0.15s; display: inline-block; }
+.law[open] > summary::before { transform: rotate(90deg); }
+.law-body { margin-top: 10px; font-size: 13px; line-height: 1.8; }
+.law-warn {
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  color: var(--text);
+}
+.law-src { font-size: 11.5px; color: var(--text-3); }
+
 /* 社群同步狀態 */
 .sync-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .sync-row:last-child { border-bottom: 0; }

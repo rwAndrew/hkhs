@@ -327,7 +327,11 @@ function renderFeed() {
         <h2>${s.emoji} ${esc(s.title)}</h2>
         <p class="about-text">${esc(s.text)}</p>
       </div>`;
-    }).join("");
+    }).join("") + `
+      <a class="about-card about-link" href="rules.html">
+        <h2>📖 版規與法律依據</h2>
+        <p class="about-text">完整版規、免責聲明，以及每一條規則背後引用的法條與判決出處。</p>
+      </a>`;
     return;
   }
 
