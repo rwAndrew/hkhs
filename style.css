@@ -618,6 +618,9 @@ input::placeholder, textarea::placeholder { color: var(--text-3); }
 }
 [data-theme="dark"] .mod-restore { color: var(--primary); }
 .mod-restore ~ .mod-pin { margin-left: 8px; }
+/* 隱藏鈕跟恢復鈕共用形狀，但用中性色，一眼分得出是「收起來」而不是「救回來」 */
+.mod-hide { color: var(--text-2); background: var(--surface-2); }
+[data-theme="dark"] .mod-hide { color: var(--text-2); }
 
 .comment-restore {
   align-self: center;

@@ -234,9 +234,13 @@ function reportBtn(p) {
   </button>`;
 }
 
+// 版主的隱藏／恢復切換。隱藏跟刪除不同：內容從公開頁面消失，但資料還在，
+// 誤判可以恢復；萬一有正式調查，紀錄也還在可以配合提供（刪掉就說不清楚了）。
 function modRestoreBtn(p) {
-  if (!IS_MOD || !p.hidden) return "";
-  return `<button class="mod-restore" data-restore="${p.id}">恢復顯示</button>`;
+  if (!IS_MOD) return "";
+  return p.hidden
+    ? `<button class="mod-restore" data-restore="${p.id}">恢復顯示</button>`
+    : `<button class="mod-restore mod-hide" data-hide="${p.id}">隱藏</button>`;
 }
 
 function authorHTML(name) {
@@ -270,7 +274,7 @@ function postCard(p, kw) {
       <div class="avatar" style="background:${avatarBg(p.anon[1])}">${p.anon[0]}</div>
       <div class="post-meta">
         ${authorHTML(p.anon[1])}
-        <div class="post-sub">${p.hidden ? `<span class="hidden-tag">⚠️ 已自動隱藏</span>` : ""}${p.pinned ? `<span class="pin-tag">📌 置頂</span>` : ""}${timeAgo(p.time)}</div>
+        <div class="post-sub">${p.hidden ? `<span class="hidden-tag">⚠️ 已隱藏</span>` : ""}${p.pinned ? `<span class="pin-tag">📌 置頂</span>` : ""}${timeAgo(p.time)}</div>
       </div>
       <span class="board-tag">${b.emoji} ${esc(b.name)}</span>
     </div>
@@ -382,7 +386,7 @@ function renderDetail() {
         <div class="avatar" style="background:${avatarBg(p.anon[1])}">${p.anon[0]}</div>
         <div class="post-meta">
           ${authorHTML(p.anon[1])}
-          <div class="post-sub">${p.hidden ? `<span class="hidden-tag">⚠️ 已自動隱藏</span>` : ""}${p.pinned ? `<span class="pin-tag">📌 置頂</span>` : ""}${timeAgo(p.time)}</div>
+          <div class="post-sub">${p.hidden ? `<span class="hidden-tag">⚠️ 已隱藏</span>` : ""}${p.pinned ? `<span class="pin-tag">📌 置頂</span>` : ""}${timeAgo(p.time)}</div>
         </div>
         <span class="board-tag">${b.emoji} ${esc(b.name)}</span>
       </div>
@@ -402,18 +406,19 @@ function renderDetail() {
     <p class="comment-count-label">留言 ${p.comments.length}</p>
     ${p.comments.map((c, i) => {
       if (c.hidden && !IS_MOD) {
-        return `<div class="comment-item hidden-comment">🚫 B${i + 1} 留言已被多人檢舉，自動隱藏</div>`;
+        return `<div class="comment-item hidden-comment">🚫 B${i + 1} 留言已被隱藏</div>`;
       }
       return `
       <div class="comment-item" style="animation-delay:${i * 30}ms">
         <div class="avatar" style="background:${avatarBg(c.anon[1])}">${c.anon[0]}</div>
         <div class="comment-body">
-          <div class="comment-author">${esc(c.anon[1])}<span class="floor">B${i + 1}</span>${c.hidden ? ` <span class="hidden-tag">⚠️ 已自動隱藏</span>` : ""}</div>
+          <div class="comment-author">${esc(c.anon[1])}<span class="floor">B${i + 1}</span>${c.hidden ? ` <span class="hidden-tag">⚠️ 已隱藏</span>` : ""}</div>
           <div class="comment-text">${esc(c.text)}</div>
           <div class="comment-time">${timeAgo(c.time)}</div>
         </div>
         ${!IS_MOD && !c.hidden ? `<button class="comment-flag ${MY_REPORTS.has("c" + c.id) ? "reported" : ""}" data-report-comment="${p.id}-${i}" aria-label="檢舉留言">⚑</button>` : ""}
         ${IS_MOD && c.hidden ? `<button class="mod-restore comment-restore" data-restore-comment="${i}">恢復</button>` : ""}
+        ${IS_MOD && !c.hidden ? `<button class="mod-restore mod-hide comment-restore" data-hide-comment="${i}">隱藏</button>` : ""}
         ${modDeleteBtn(`data-del-comment="${i}"`)}
       </div>`;
     }).join("")}
@@ -508,6 +513,31 @@ document.addEventListener("click", async (e) => {
     }
     toast(c.hidden ? "留言已自動隱藏 🚫" : "已收到檢舉 🙏");
     renderDetail();
+    return;
+  }
+
+  // 版主：隱藏留言
+  const hideC = e.target.closest("[data-hide-comment]");
+  if (hideC) {
+    e.stopPropagation();
+    const c = POSTS.find((x) => x.id === state.openPostId).comments[+hideC.dataset.hideComment];
+    c.hidden = true;
+    DB.updateComment(c.id, { hidden: true }).catch(() => toast("同步失敗，請重試"));
+    renderDetail();
+    toast("留言已隱藏，可隨時恢復");
+    return;
+  }
+
+  // 版主：隱藏貼文
+  const hideBtn = e.target.closest("[data-hide]");
+  if (hideBtn) {
+    e.stopPropagation();
+    const p = POSTS.find((x) => x.id === +hideBtn.dataset.hide);
+    p.hidden = true;
+    DB.updatePost(p.id, { hidden: true }).catch(() => toast("同步失敗，請重試"));
+    renderFeed();
+    if (!$("detail-page").hidden) renderDetail();
+    toast("貼文已隱藏，可隨時恢復");
     return;
   }
 
