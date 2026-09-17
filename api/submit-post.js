@@ -3,7 +3,7 @@
 // 以前瀏覽器是直接呼叫資料庫的 create_post 發文。改走這裡之後，資料庫那邊
 // 已經收回匿名者的呼叫權限（moderation-setup.sql），否則按 F12 就能繞過審查。
 //
-// 版主發文不審查：帶著登入 token 進來，就用版主身分直接呼叫資料庫。
+// 版主以「版主」身分發文時不審查；版主用匿名身分發文時照常審查。
 
 import { moderate } from "../lib/moderation.js";
 
@@ -39,11 +39,18 @@ export default async function handler(req, res) {
 
   const mod = await isMod(req.headers.authorization);
 
-  // ---- 審查（版主跳過）----
+  // 「版主」這個發文身分只有版主能用，其他人改請求內容冒用一律拒絕
+  const asModIdentity = name === "版主";
+  if (asModIdentity && !mod) return res.status(403).json({ error: "NOTICE_MOD_ONLY" });
+
+  // ---- 審查 ----
+  // 只有「以版主身分發文」才跳過審查（公告可能需要提到人名，例如表揚同學）。
+  // 版主用匿名身分發文時，外觀跟一般同學完全一樣，就跟一般同學一樣審查——
+  // 以前是「有登入就跳過」，結果版主用匿名身分發的班級座號也直接通過了。
   // 緊急開關：在 Vercel 設 MOD_DISABLED=1 就暫停審查、全部放行，
   // 用在審查端點本身出問題、導致沒人能發文的時候
   let result = { verdict: "allow" };
-  if (!mod && process.env.MOD_DISABLED !== "1") {
+  if (!(mod && asModIdentity) && process.env.MOD_DISABLED !== "1") {
     result = await moderate([title, body].filter(Boolean).join("\n"));
     if (result.verdict === "block") {
       await log({
