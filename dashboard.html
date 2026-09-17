@@ -132,6 +132,7 @@
       const [stats, queue] = await Promise.all([DB.loadDashboardStats(), DB.loadReportQueue()]);
       renderDashboard(stats, queue);
       loadSyncPanel();   // 這塊要打外部 API，慢一點，讓它自己載入不要卡住整頁
+      loadModPanel();
     }
 
     function syncBadge(text) {
@@ -139,6 +140,55 @@
       if (text.startsWith("沒有紀錄")) return `<span class="sync-wait">⏳ 等待中</span>`;
       if (text === "發佈中") return `<span class="sync-wait">⏳ 發佈中</span>`;
       return `<span class="sync-bad">✕ 失敗</span>`;
+    }
+
+    // ---------- AI 審查 ----------
+    const MOD_LABEL = { block: "擋下", review: "不確定", unreviewed: "未審查" };
+
+    async function loadModPanel() {
+      const queueBox = $("mod-queue");
+      const logBox = $("mod-log");
+      if (!queueBox) return;
+      try {
+        const [queue, log] = await Promise.all([DB.loadModQueue(), DB.loadModLog()]);
+
+        queueBox.innerHTML = queue.length
+          ? queue.map((p) => `<div class="sync-row">
+              <div class="sync-row-head">
+                <a href="index.html#post/${p.id}">#${p.id} ${esc(p.title ? p.title.slice(0, 18) : "(無標題)")}</a>
+                <span class="sync-wait">${MOD_LABEL[p.mod_status] || p.mod_status}</span>
+              </div>
+              <pre class="sync-err">${esc((p.body || "").slice(0, 160))}</pre>
+              <div class="sync-row-state" style="margin-top:8px">
+                <button class="text-btn" data-mod-approve="${p.id}">放行（會同步到社群）</button>
+                <button class="text-btn" data-mod-hide="${p.id}">隱藏</button>
+              </div>
+            </div>`).join("")
+          : `<p class="dash-empty-hint">沒有待處理的貼文</p>`;
+
+        logBox.innerHTML = log.length
+          ? log.map((l) => `<div class="sync-row">
+              <div class="sync-row-head">
+                <span class="${l.verdict === "block" ? "sync-bad" : "sync-wait"}">${MOD_LABEL[l.verdict] || l.verdict}</span>
+                <span class="sync-wait">${timeAgo(Date.parse(l.created_at))}</span>
+                ${l.post_id ? `<a href="index.html#post/${l.post_id}">#${l.post_id}</a>` : ""}
+              </div>
+              <div class="sync-row-state">
+                ${l.matched ? `<span>觸發：${esc(l.matched)}</span>` : ""}
+                ${l.reason ? `<span>${esc(l.reason)}</span>` : ""}
+                ${l.model ? `<span>${esc(l.model.split(":").pop())}</span>` : ""}
+              </div>
+              ${l.excerpt ? `<pre class="sync-err">${esc(l.excerpt)}</pre>` : ""}
+            </div>`).join("")
+          : `<p class="dash-empty-hint">最近 30 天沒有攔截紀錄</p>`;
+      } catch (e) {
+        const hint = /mod_status|moderation_log/.test(e.message || "")
+          ? "資料庫還沒設定審查功能，請執行 moderation-setup.sql"
+          : "讀取失敗：" + (e.message || e);
+        queueBox.innerHTML = `<p class="dash-empty-hint">${esc(hint)}</p>`;
+        logBox.innerHTML = "";
+        console.error(e);
+      }
     }
 
     async function loadSyncPanel() {
@@ -213,6 +263,18 @@
         </section>
 
         <section class="dash-section">
+          <h2 class="dash-section-title">AI 審查：待處理</h2>
+          <p class="dash-section-hint">AI 無法判斷、或發文當下審查服務暫時無法使用的貼文。網站上照常顯示，但在你處理前不會同步到 IG／Threads。</p>
+          <div id="mod-queue"><p class="dash-empty-hint">載入中…</p></div>
+        </section>
+
+        <section class="dash-section">
+          <h2 class="dash-section-title">AI 審查：攔截紀錄</h2>
+          <p class="dash-section-hint">最近 30 筆。被擋下的貼文不會發佈，這裡只留摘要讓你檢查有沒有誤擋，30 天後自動刪除。</p>
+          <div id="mod-log"><p class="dash-empty-hint">載入中…</p></div>
+        </section>
+
+        <section class="dash-section">
           <h2 class="dash-section-title">社群同步</h2>
           <p class="dash-section-hint">每篇貼文會自動發到 IG 和 Threads。失敗的會在這裡標出原因，按「重新發佈」可以重試。</p>
           <div id="sync-body"><p class="dash-empty-hint">載入中…</p></div>
@@ -235,6 +297,20 @@
     }
 
     document.addEventListener("click", async (e) => {
+      const approve = e.target.closest("[data-mod-approve]");
+      if (approve) {
+        await DB.setModStatus(+approve.dataset.modApprove, { mod_status: "ok" });
+        toast("已放行，稍後會同步到社群");
+        loadModPanel();
+        return;
+      }
+      const modHide = e.target.closest("[data-mod-hide]");
+      if (modHide) {
+        await DB.setModStatus(+modHide.dataset.modHide, { hidden: true, mod_status: "blocked" });
+        toast("已隱藏");
+        loadModPanel();
+        return;
+      }
       const requeue = e.target.closest("[data-requeue]");
       if (requeue) {
         requeue.disabled = true;

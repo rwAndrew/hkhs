@@ -966,8 +966,32 @@ $("btn-compose-post").addEventListener("click", async () => {
   const anon = IS_MOD && state.composeAsMod ? ["📣", "版主"] : state.composeAnon;
   let post;
   if (DB.ready) {
-    try { post = await DB.createPost({ board: state.composeBoard, title, text, anon }); }
-    catch (err) { toast(dbErrMsg(err)); return; }
+    const btn = $("btn-compose-post");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "審查中…";
+    $("compose-blocked").hidden = true;
+    try {
+      post = await DB.createPost({ board: state.composeBoard, title, text, anon });
+    } catch (err) {
+      if (err.blocked) {
+        // 被擋下時不清空，讓使用者直接改
+        const b = err.blocked;
+        $("compose-blocked").innerHTML =
+          `<strong>這篇沒有通過審查</strong>` +
+          (b.matched ? `偵測到「${esc(b.matched)}」` : "") +
+          (b.reason ? `（${esc(b.reason)}）` : "") +
+          `。港討不允許完整姓名、班級座號、聯絡方式，或以名字攻擊他人。請修改後再送出。` +
+          ` <a href="rules.html" target="_blank" rel="noopener">看版規</a>`;
+        $("compose-blocked").hidden = false;
+      } else {
+        toast(dbErrMsg(err));
+      }
+      return;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
   } else {
     post = {
       id: Date.now(), board: state.composeBoard, anon,
@@ -979,6 +1003,7 @@ $("btn-compose-post").addEventListener("click", async () => {
   localStorage.setItem("kgsh-last-post", Date.now());
   $("compose-input-title").value = "";
   $("compose-textarea").value = "";
+  $("compose-blocked").hidden = true;
   closeCompose();
   state.tab = "home";
   state.board = "all";

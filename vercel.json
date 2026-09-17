@@ -6,6 +6,8 @@
   "functions": {
     "api/ig-publish.js": { "maxDuration": 60 },
     "api/threads-publish.js": { "maxDuration": 60 },
-    "api/sync-status.js": { "maxDuration": 60 }
+    "api/sync-status.js": { "maxDuration": 60 },
+    "api/submit-post.js": { "maxDuration": 30 },
+    "api/moderation-sweep.js": { "maxDuration": 60 }
   }
 }

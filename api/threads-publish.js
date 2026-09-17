@@ -31,6 +31,20 @@ async function sbGet(path) {
   return r.json();
 }
 
+// 只發「通過 AI 審查」的貼文（mod_status = ok）。不確定或審查服務當時掛掉的貼文
+// 會留在網站上，但不同步出去，等補審或版主確認後才發。
+// moderation-setup.sql 執行前資料庫沒有這個欄位，查詢會失敗，那時就不過濾。
+async function sbGetApproved(path) {
+  try {
+    return await sbGet(`${path}&mod_status=eq.ok`);
+  } catch (e) {
+    // 只有「欄位不存在」（400）才退回不過濾；其他錯誤照常拋出，
+    // 不能因為一次網路異常就把還沒審查的貼文放出去
+    if (!/: 400$/.test(e.message)) throw e;
+    return sbGet(path);
+  }
+}
+
 async function sbWrite(path, method, body) {
   const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, {
     method,
@@ -126,8 +140,8 @@ export default async function handler(req, res) {
   // 永遠輪不到，但連內文一起撈幾百篇會太肥。挑出要發的那幾篇之後再撈完整內容。
   const [candidates, done] = await Promise.all([
     only
-      ? sbGet(`posts?id=eq.${only}&hidden=eq.false&select=id`)
-      : sbGet(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=id.desc&select=id&limit=1000`),
+      ? sbGetApproved(`posts?id=eq.${only}&hidden=eq.false&select=id`)
+      : sbGetApproved(`posts?hidden=eq.false&created_at=lt.${encodeURIComponent(cutoff)}&order=id.desc&select=id&limit=1000`),
     only
       ? sbGet(`threads_published?post_id=eq.${only}&select=post_id,status,attempts,published_at`)
       : sbGet("threads_published?select=post_id,status,attempts,published_at&order=post_id.desc&limit=1000"),

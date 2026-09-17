@@ -132,12 +132,23 @@ const DB = (() => {
     searchPosts,
 
     // ---------- 匿名寫入（走資料庫函式，規則在伺服器端） ----------
+    // 發文走伺服器的審查端點，不直接寫資料庫（資料庫已收回匿名者的發文權限）。
+    // 被審查擋下時丟出帶 blocked 資訊的錯誤，讓畫面告訴使用者原因並保留他打的字。
     createPost: async ({ board, title, text, anon }) => {
-      const rows = await rpc("create_post", {
-        p_board: board, p_title: title, p_body: text,
-        p_emoji: anon[0], p_name: anon[1], p_device: deviceId,
+      const token = (await client.auth.getSession()).data.session?.access_token;
+      const res = await fetch("/api/submit-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ board, title, body: text, emoji: anon[0], name: anon[1], device: deviceId }),
       });
-      return mapPost({ ...rows[0], comments: [] }, likedSet());
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 422 && data.blocked) {
+        const err = new Error("BLOCKED");
+        err.blocked = data;
+        throw err;
+      }
+      if (!res.ok) throw new Error(data.error || "連線失敗");
+      return mapPost({ ...data.post, comments: [] }, likedSet());
     },
     addComment: async (postId, text, anon) => {
       const rows = await rpc("add_comment", {
@@ -175,6 +186,26 @@ const DB = (() => {
       ready ? must(client.from("about_sections").upsert({
         id: s.id, emoji: s.emoji, title: s.title, body: s.text,
       })) : Promise.resolve(),
+
+    // ---------- AI 審查（需登入） ----------
+    // 待處理：AI 判斷不確定（review），或發文當下審查服務掛掉還沒補審（unreviewed）
+    loadModQueue: async () => {
+      const { data, error } = await client.from("posts")
+        .select("id, title, body, mod_status, created_at")
+        .in("mod_status", ["review", "unreviewed"])
+        .eq("hidden", false)
+        .order("id", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data;
+    },
+    loadModLog: async () => {
+      const { data, error } = await client.from("moderation_log")
+        .select("*").order("created_at", { ascending: false }).limit(30);
+      if (error) throw error;
+      return data;
+    },
+    setModStatus: (id, patch) => must(client.from("posts").update(patch).eq("id", id)),
 
     // ---------- 管理後台（需登入） ----------
     loadDashboardStats: async () => {
