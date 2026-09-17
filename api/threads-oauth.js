@@ -7,6 +7,8 @@
 // 流程：/api/threads-oauth            → 導向 Threads 授權頁（帶上完整 scope）
 //       /api/threads-oauth?code=xxx   → 換短期 token → 換 60 天長期 token → 寫進資料庫
 
+import { secretMatches } from "../lib/secret.js";
+
 const SCOPES = [
   "threads_basic",
   "threads_content_publish",
@@ -36,8 +38,7 @@ code{background:#F0F3F6;padding:2px 6px;border-radius:6px;font-size:13px}
 export default async function handler(req, res) {
   const appId = process.env.THREADS_APP_ID;
   const appSecret = process.env.THREADS_APP_SECRET;
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const redirectUri = `${proto}://${req.headers.host}/api/threads-oauth`;
+  const redirectUri = "https://hkhs.vercel.app/api/threads-oauth";   // 固定網域，不信任 Host 標頭
 
   if (!appId || !appSecret) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
 
   // 第一階段：使用者還沒授權 → 導去 Threads 的授權頁
   if (!code && !error) {
-    if (state !== process.env.IG_CRON_SECRET) {
+    if (!secretMatches(state)) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(401).send(page("需要密鑰",
         `<h2 class="bad">網址需要帶上密鑰</h2>

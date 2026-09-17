@@ -30,47 +30,10 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.6/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.6/dist/umd/supabase.min.js" integrity="sha384-GyhLKJoRcMXYwIJUTyx0/uSPYliVPdRYYXJm3G6zyMjKShNs8jLM7WaLpk8Vr4W/" crossorigin="anonymous"></script>
   <script src="config.js"></script>
   <script src="db.js"></script>
-  <script>
-    // 資料庫模式：用 Supabase Auth（信箱＋密碼，建帳號見 config.js 說明）
-    // 展示模式（config.js 未填）：暫時性通行碼 kgsh-demo
-    const DEMO_PASS = "kgsh-demo";
-
-    const email = document.getElementById("admin-email");
-    const pass = document.getElementById("admin-pass");
-    const err = document.getElementById("admin-error");
-
-    if (DB.ready) {
-      document.getElementById("admin-email-field").hidden = false;
-    } else {
-      pass.placeholder = "版主通行碼";
-    }
-
-    async function login() {
-      if (DB.ready) {
-        const { error } = await DB.signIn(email.value.trim(), pass.value);
-        if (error) { err.hidden = false; return; }
-        location.href = "index.html";
-      } else if (pass.value === DEMO_PASS) {
-        localStorage.setItem("kgsh-mod", "1");
-        location.href = "index.html";
-      } else {
-        err.hidden = false;
-        pass.value = "";
-      }
-    }
-
-    document.getElementById("btn-admin-login").addEventListener("click", login);
-    pass.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
-    pass.addEventListener("input", () => { err.hidden = true; });
-
-    // 主題跟隨主站設定
-    if (localStorage.getItem("kgsh-theme") === "dark" ||
-        (!localStorage.getItem("kgsh-theme") && matchMedia("(prefers-color-scheme: dark)").matches)) {
-      document.documentElement.dataset.theme = "dark";
-    }
-  </script>
+  <script src="theme.js"></script>
+  <script src="admin.js"></script>
 </body>
 </html>

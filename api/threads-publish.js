@@ -4,6 +4,7 @@
 // 架構跟 ig-publish.js 幾乎一樣（同一套 Meta 帳號體系、同樣的容器→輪詢→發佈模式），
 // 差異只在 API 端點是 graph.threads.net，欄位命名和發文字數上限不同。
 
+import { secretMatches } from "../lib/secret.js";
 import { fetchPost, fetchCommentCount, fetchBoardLabel, excerpt } from "../lib/post-data.js";
 import { imageUrl, warmImage } from "../lib/social-image.js";
 import { claim, isPending, isQuotaError, withinPostingHours, postingHoursText } from "../lib/publish-claim.js";
@@ -84,7 +85,7 @@ function buildCaption(p) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
+  if (!secretMatches(req.headers["x-cron-secret"])) {
     return res.status(401).json({ error: "unauthorized" });
   }
   // ?dry=1：試跑。只回報「這一輪會發哪幾篇」，不會真的發文，也不佔額度。

@@ -3,11 +3,13 @@
 // 貼文沒同步到 IG／Threads 時，用這支看最近幾篇各自卡在哪一步：
 // 是根本沒有紀錄（trigger 沒送到、排程沒撿到）、還是發佈失敗（看 last_error）。
 //
-//   GET /api/sync-status?secret=…        最近 10 篇
-//   GET /api/sync-status?secret=…&n=30   最近 30 篇
-//   GET /api/sync-status?secret=…&probe=1  另外拿兩邊的 token 各打一次讀取 API，
+//   GET /api/sync-status?n=10        最近 10 篇（密鑰放 x-cron-secret 標頭）
+//   GET /api/sync-status?n=30        最近 30 篇
+//   GET /api/sync-status?probe=1  另外拿兩邊的 token 各打一次讀取 API，
 //                                          用來分辨「整個 App 被擋」還是「只有發佈被擋」
 //                                          （只回傳 Meta 的回應，不會吐出 token）
+
+import { secretMatches } from "../lib/secret.js";
 
 function sbHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,7 +25,8 @@ async function sbGet(path) {
 // 兩種身分都放行：命令列除錯用密鑰，管理後台用版主登入後的 token。
 // 站上只會有版主一個帳號，所以「有效的登入」等同於「是版主」，跟 db.js 的 isMod 一致。
 async function authorized(req) {
-  if (req.query?.secret === process.env.IG_CRON_SECRET) return true;
+  // 密鑰只收標頭，不收網址參數：網址會留在伺服器與代理的日誌裡
+  if (secretMatches(req.headers["x-cron-secret"])) return true;
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith("Bearer ")) return false;
   const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {

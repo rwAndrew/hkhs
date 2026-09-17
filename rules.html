@@ -179,12 +179,6 @@
 
     </main>
   </div>
-
-  <script>
-    if (localStorage.getItem("kgsh-theme") === "dark" ||
-        (!localStorage.getItem("kgsh-theme") && matchMedia("(prefers-color-scheme: dark)").matches)) {
-      document.documentElement.dataset.theme = "dark";
-    }
-  </script>
+  <script src="theme.js"></script>
 </body>
 </html>

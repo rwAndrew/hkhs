@@ -4,6 +4,7 @@
 //   不確定 → review，留給版主在後台決定
 // 審查服務還是全掛就先不動，下一輪再試。
 
+import { secretMatches } from "../lib/secret.js";
 import { moderate } from "../lib/moderation.js";
 
 const PER_RUN = 8;
@@ -15,7 +16,7 @@ function h() {
 }
 
 export default async function handler(req, res) {
-  if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
+  if (!secretMatches(req.headers["x-cron-secret"])) {
     return res.status(401).json({ error: "unauthorized" });
   }
   const base = `${process.env.SUPABASE_URL}/rest/v1`;

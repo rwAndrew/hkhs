@@ -13,6 +13,7 @@
 //   4. 用現成的 /api/og 產圖（經 weserv 轉成 IG 要求的 JPEG）→ 發佈
 //   5. 成功／失敗都記錄在 ig_published，失敗的下輪重試（最多 5 次）
 
+import { secretMatches } from "../lib/secret.js";
 import { imageUrl, warmImage } from "../lib/social-image.js";
 import { claim, isPending, isQuotaError, withinPostingHours, postingHoursText } from "../lib/publish-claim.js";
 
@@ -111,7 +112,7 @@ function buildCaption(p) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
+  if (!secretMatches(req.headers["x-cron-secret"])) {
     return res.status(401).json({ error: "unauthorized" });
   }
   // ?dry=1：試跑。只回報「這一輪會發哪幾篇」，不會真的發文，也不佔額度。

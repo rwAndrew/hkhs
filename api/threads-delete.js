@@ -1,6 +1,8 @@
 // 由 Supabase 的 trigger 呼叫（貼文被刪除，或被隱藏時即時觸發，不用等排程）：
 // 如果這篇貼文有真的發過 Threads，就把 Threads 上那篇也刪掉。
 
+import { secretMatches } from "../lib/secret.js";
+
 const GRAPH = "https://graph.threads.net/v1.0";
 
 function sbHeaders() {
@@ -24,7 +26,7 @@ async function sbWrite(path, method, body) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers["x-cron-secret"] !== process.env.IG_CRON_SECRET) {
+  if (!secretMatches(req.headers["x-cron-secret"])) {
     return res.status(401).json({ error: "unauthorized" });
   }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {

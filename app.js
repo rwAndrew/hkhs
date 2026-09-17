@@ -212,6 +212,12 @@ function highlight(text, kw) {
   return safe.replace(new RegExp("(" + pattern + ")", "gi"), "<mark>$1</mark>");
 }
 
+// 看板顏色會放進 style 屬性；只接受 #RGB／#RRGGBB，其他一律用預設色，
+// 免得有人把 url() 之類的東西塞進去
+function safeColor(c) {
+  return /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(c || "") ? c : "#E0F5F5";
+}
+
 function boardOf(id) { return BOARDS.find((b) => b.id === id) || BOARDS[1]; }
 
 function modDeleteBtn(attr) {
@@ -306,7 +312,7 @@ function renderFeed() {
     feed.innerHTML = `<div class="board-grid">` + BOARDS.slice(1).map((b, i) =>
       `<div class="board-card" data-board-card="${b.id}" style="animation-delay:${i * 40}ms">
         ${IS_MOD ? `<button class="board-edit-btn" data-board-edit="${b.id}" aria-label="編輯看板">✎</button>` : ""}
-        <div class="board-emoji" style="background:${b.color}">${b.emoji}</div>
+        <div class="board-emoji" style="background:${safeColor(b.color)}">${b.emoji}</div>
         <h3>${esc(b.name)}版</h3><p>${esc(b.desc)}</p>
       </div>`).join("")
       + (IS_MOD ? `<div class="board-card board-add" data-board-add>＋ 新增看板</div>` : "")

@@ -7,8 +7,7 @@
 import { fetchAllPostIds } from "../lib/post-data.js";
 
 export default async function handler(req, res) {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const origin = `${proto}://${req.headers.host}`;
+  const origin = "https://hkhs.vercel.app";   // 固定網域，不信任 Host 標頭
   const posts = await fetchAllPostIds();
 
   const urls = [

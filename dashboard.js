@@ -1,0 +1,331 @@
+const $ = (id) => document.getElementById(id);
+const AVATAR_BG = ["#E0F5F5", "#E8F0FE", "#FFF4E0", "#F3E8FF", "#FFE8EE", "#E8F8E8", "#FFF0E6"];
+const avatarBg = (seed) => AVATAR_BG[seed.charCodeAt(0) % AVATAR_BG.length];
+const BOARD_LABELS = {
+  chat: ["💬", "閒聊"], study: ["📚", "課業"], club: ["🎸", "社團"], love: ["💘", "感情"],
+  food: ["🍱", "美食"], trade: ["🏷️", "二手"], notice: ["📣", "公告"],
+};
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function timeAgo(t) {
+  const d = Date.now() - t, M = 60e3, H = 3600e3;
+  if (d < M) return "剛剛";
+  if (d < H) return Math.floor(d / M) + " 分鐘前";
+  if (d < 24 * H) return Math.floor(d / H) + " 小時前";
+  return Math.floor(d / (24 * H)) + " 天前";
+}
+let toastTimer;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 2200);
+}
+
+function statCard(label, value, tone) {
+  return `<div class="stat-card ${tone || ""}">
+    <div class="stat-value">${value}</div>
+    <div class="stat-label">${esc(label)}</div>
+  </div>`;
+}
+
+function queuePostItem(p) {
+  const board = BOARD_LABELS[p.board] || ["📋", p.board];
+  return `<div class="queue-item">
+    <div class="queue-head">
+      <span class="queue-type-tag">貼文</span>
+      <span class="board-tag">${board[0]} ${esc(board[1])}</span>
+      <span class="queue-reports ${p.hidden ? "is-hidden" : ""}">🚩 ${p.reports}${p.hidden ? " · 已隱藏" : ""}</span>
+    </div>
+    <div class="queue-body">
+      <div class="avatar" style="background:${avatarBg(p.anon[1])}">${p.anon[0]}</div>
+      <div class="queue-text">
+        ${p.title ? `<strong>${esc(p.title)}</strong>` : ""}
+        <p>${esc(p.text)}</p>
+        <span class="comment-time">${esc(p.anon[1])} · ${timeAgo(p.time)}</span>
+      </div>
+    </div>
+    <div class="queue-actions">
+      <a class="text-btn" href="index.html#post/${p.id}">查看貼文</a>
+      ${p.hidden ? `<button class="mod-restore" data-restore-post="${p.id}">恢復顯示</button>` : ""}
+      <button class="mod-delete" data-delete-post="${p.id}" aria-label="刪除">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function queueCommentItem(c) {
+  return `<div class="queue-item">
+    <div class="queue-head">
+      <span class="queue-type-tag">留言</span>
+      <span class="queue-reports ${c.hidden ? "is-hidden" : ""}">🚩 ${c.reports}${c.hidden ? " · 已隱藏" : ""}</span>
+    </div>
+    <div class="queue-body">
+      <div class="avatar" style="background:${avatarBg(c.anon[1])}">${c.anon[0]}</div>
+      <div class="queue-text">
+        <p>${esc(c.text)}</p>
+        <span class="comment-time">${esc(c.anon[1])} · ${timeAgo(c.time)} · 回覆於「${esc((c.postTitle || "").slice(0, 20))}」</span>
+      </div>
+    </div>
+    <div class="queue-actions">
+      <a class="text-btn" href="index.html#post/${c.postId}">查看貼文</a>
+      ${c.hidden ? `<button class="mod-restore" data-restore-comment="${c.id}">恢復顯示</button>` : ""}
+      <button class="mod-delete" data-delete-comment="${c.id}" aria-label="刪除">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+// 社群同步狀態要讀 ig_published / threads_published，那兩張表前端讀不到（RLS 擋著），
+// 所以走後端端點，用版主登入後的 token 認身分。
+async function fetchSync(params) {
+  const token = (await DB.sessionToken()) || "";
+  const r = await fetch(`/api/sync-status?${params}`, { headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) throw new Error("sync-status " + r.status);
+  return r.json();
+}
+
+async function loadDashboard() {
+  const [stats, queue] = await Promise.all([DB.loadDashboardStats(), DB.loadReportQueue()]);
+  renderDashboard(stats, queue);
+  loadSyncPanel();   // 這塊要打外部 API，慢一點，讓它自己載入不要卡住整頁
+  loadModPanel();
+}
+
+function syncBadge(text) {
+  if (text.startsWith("已發佈")) return `<span class="sync-ok">✓ 已發佈</span>`;
+  if (text.startsWith("沒有紀錄")) return `<span class="sync-wait">⏳ 等待中</span>`;
+  if (text === "發佈中") return `<span class="sync-wait">⏳ 發佈中</span>`;
+  return `<span class="sync-bad">✕ 失敗</span>`;
+}
+
+// ---------- AI 審查 ----------
+const MOD_LABEL = { block: "擋下", review: "不確定", unreviewed: "未審查" };
+
+async function loadModPanel() {
+  const queueBox = $("mod-queue");
+  const logBox = $("mod-log");
+  if (!queueBox) return;
+  try {
+    const [queue, log] = await Promise.all([DB.loadModQueue(), DB.loadModLog()]);
+
+    queueBox.innerHTML = queue.length
+      ? queue.map((p) => `<div class="sync-row">
+          <div class="sync-row-head">
+            <a href="index.html#post/${p.id}">#${p.id} ${esc(p.title ? p.title.slice(0, 18) : "(無標題)")}</a>
+            <span class="sync-wait">${MOD_LABEL[p.mod_status] || p.mod_status}</span>
+          </div>
+          <pre class="sync-err">${esc((p.body || "").slice(0, 160))}</pre>
+          <div class="sync-row-state" style="margin-top:8px">
+            <button class="text-btn" data-mod-approve="${p.id}">放行（會同步到社群）</button>
+            <button class="text-btn" data-mod-hide="${p.id}">隱藏</button>
+          </div>
+        </div>`).join("")
+      : `<p class="dash-empty-hint">沒有待處理的貼文</p>`;
+
+    logBox.innerHTML = log.length
+      ? log.map((l) => `<div class="sync-row">
+          <div class="sync-row-head">
+            <span class="${l.verdict === "block" ? "sync-bad" : "sync-wait"}">${MOD_LABEL[l.verdict] || l.verdict}</span>
+            <span class="sync-wait">${timeAgo(Date.parse(l.created_at))}</span>
+            ${l.post_id ? `<a href="index.html#post/${l.post_id}">#${l.post_id}</a>` : ""}
+          </div>
+          <div class="sync-row-state">
+            ${l.matched ? `<span>觸發：${esc(l.matched)}</span>` : ""}
+            ${l.reason ? `<span>${esc(l.reason)}</span>` : ""}
+            ${l.model ? `<span>${esc(l.model.split(":").pop())}</span>` : ""}
+          </div>
+          ${l.excerpt ? `<pre class="sync-err">${esc(l.excerpt)}</pre>` : ""}
+        </div>`).join("")
+      : `<p class="dash-empty-hint">最近 30 天沒有攔截紀錄</p>`;
+  } catch (e) {
+    const hint = /mod_status|moderation_log/.test(e.message || "")
+      ? "資料庫還沒設定審查功能，請執行 moderation-setup.sql"
+      : "讀取失敗：" + (e.message || e);
+    queueBox.innerHTML = `<p class="dash-empty-hint">${esc(hint)}</p>`;
+    logBox.innerHTML = "";
+    console.error(e);
+  }
+}
+
+async function loadSyncPanel() {
+  const box = $("sync-body");
+  if (!box) return;
+  try {
+    const data = await fetchSync("n=8");
+    const rows = data.posts.map((p) => {
+      // 只有「真的失敗」才給重發按鈕；還在等排程的不算失敗，按了也只是白跑一趟
+      const failed = (s) => !s.startsWith("已發佈") && !s.startsWith("沒有紀錄") && s !== "發佈中";
+      const err = [
+        failed(p.IG) ? "IG：" + p.IG : "",
+        failed(p.Threads) ? "Threads：" + p.Threads : "",
+      ].filter(Boolean).join("\n");
+      return `<div class="sync-row">
+        <div class="sync-row-head">
+          <a href="index.html#post/${p.id}">#${p.id} ${esc(p.title ? p.title.slice(0, 18) : "(無標題)")}</a>
+          ${p.hidden ? `<span class="sync-wait">已隱藏</span>` : ""}
+        </div>
+        <div class="sync-row-state">
+          <span>IG ${syncBadge(p.IG)}</span>
+          <span>Threads ${syncBadge(p.Threads)}</span>
+          ${err ? `<button class="text-btn" data-requeue="${p.id}">重新發佈</button>` : ""}
+        </div>
+        ${err ? `<pre class="sync-err">${esc(err)}</pre>` : ""}
+      </div>`;
+    }).join("");
+    box.innerHTML = rows || `<p class="dash-empty-hint">還沒有貼文</p>`;
+  } catch (e) {
+    box.innerHTML = `<p class="dash-empty-hint">讀不到同步狀態（${esc(e.message)}）</p>`;
+    console.error(e);
+  }
+}
+
+function renderDashboard(stats, queue) {
+  const boardRows = Object.entries(stats.boardCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, n]) => {
+      const label = BOARD_LABELS[id] || ["📋", id];
+      const pct = stats.totalPosts ? Math.round((n / stats.totalPosts) * 100) : 0;
+      return `<div class="board-bar-row">
+        <span class="board-bar-label">${label[0]} ${esc(label[1])}</span>
+        <div class="board-bar-track"><div class="board-bar-fill" style="width:${pct}%"></div></div>
+        <span class="board-bar-count">${n}</span>
+      </div>`;
+    }).join("");
+
+  const queueItems = [...queue.posts, ...queue.comments.map((c) => ({ ...c, __isComment: true }))]
+    .sort((a, b) => b.reports - a.reports);
+
+  const queueHtml = queueItems.length
+    ? queueItems.map((it) => (it.__isComment ? queueCommentItem(it) : queuePostItem(it))).join("")
+    : `<div class="feed-empty"><span class="emoji">✨</span><strong>目前沒有被檢舉的內容</strong><p>檢舉佇列是空的，很乾淨</p></div>`;
+
+  $("dash-root").innerHTML = `
+    <div class="stat-grid">
+      ${statCard("總貼文數", stats.totalPosts)}
+      ${statCard("總留言數", stats.totalComments)}
+      ${statCard("今日新增貼文", stats.todayPosts)}
+      ${statCard("隱藏中（貼文＋留言）", stats.hiddenPosts + stats.hiddenComments, (stats.hiddenPosts + stats.hiddenComments) ? "stat-warn" : "")}
+    </div>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">看板分佈</h2>
+      <div class="board-bar-list">${boardRows || "<p class=\"dash-empty-hint\">還沒有貼文</p>"}</div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">檢舉佇列 ${queueItems.length ? `<span class="queue-count">${queueItems.length}</span>` : ""}</h2>
+      <p class="dash-section-hint">累積檢舉滿 3 次會自動隱藏；這裡連還沒到門檻的也會列出來，方便你提早留意。</p>
+      ${queueHtml}
+    </section>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">AI 審查：待處理</h2>
+      <p class="dash-section-hint">AI 無法判斷、或發文當下審查服務暫時無法使用的貼文。網站上照常顯示，但在你處理前不會同步到 IG／Threads。</p>
+      <div id="mod-queue"><p class="dash-empty-hint">載入中…</p></div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">AI 審查：攔截紀錄</h2>
+      <p class="dash-section-hint">最近 30 筆。被擋下的貼文不會發佈，這裡只留摘要讓你檢查有沒有誤擋，30 天後自動刪除。</p>
+      <div id="mod-log"><p class="dash-empty-hint">載入中…</p></div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">社群同步</h2>
+      <p class="dash-section-hint">每篇貼文會自動發到 IG 和 Threads。失敗的會在這裡標出原因，按「重新發佈」可以重試。</p>
+      <div id="sync-body"><p class="dash-empty-hint">載入中…</p></div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="dash-section-title">其他管理</h2>
+      <div class="dash-links">
+        <a class="dash-link-card" href="index.html#tab-boards">
+          <span>🗂️</span>
+          <div><strong>編輯看板</strong><p>新增、改名、刪除看板</p></div>
+        </a>
+        <a class="dash-link-card" href="index.html#tab-about">
+          <span>📜</span>
+          <div><strong>編輯關於／版規</strong><p>更新公告內容</p></div>
+        </a>
+      </div>
+    </section>
+  `;
+}
+
+document.addEventListener("click", async (e) => {
+  const approve = e.target.closest("[data-mod-approve]");
+  if (approve) {
+    await DB.setModStatus(+approve.dataset.modApprove, { mod_status: "ok" });
+    toast("已放行，稍後會同步到社群");
+    loadModPanel();
+    return;
+  }
+  const modHide = e.target.closest("[data-mod-hide]");
+  if (modHide) {
+    await DB.setModStatus(+modHide.dataset.modHide, { hidden: true, mod_status: "blocked" });
+    toast("已隱藏");
+    loadModPanel();
+    return;
+  }
+  const requeue = e.target.closest("[data-requeue]");
+  if (requeue) {
+    requeue.disabled = true;
+    requeue.textContent = "發佈中…";
+    try {
+      const r = await fetchSync(`requeue=${requeue.dataset.requeue}`);
+      toast(`IG：${r.IG}／Threads：${r.Threads}`);
+    } catch (err) {
+      toast("重新發佈失敗");
+      console.error(err);
+    }
+    loadSyncPanel();
+    return;
+  }
+  const restorePost = e.target.closest("[data-restore-post]");
+  if (restorePost) {
+    await DB.updatePost(+restorePost.dataset.restorePost, { hidden: false, report_count: 0 });
+    toast("貼文已恢復顯示 ✓");
+    loadDashboard();
+    return;
+  }
+  const restoreComment = e.target.closest("[data-restore-comment]");
+  if (restoreComment) {
+    await DB.updateComment(+restoreComment.dataset.restoreComment, { hidden: false, report_count: 0 });
+    toast("留言已恢復顯示 ✓");
+    loadDashboard();
+    return;
+  }
+  const deletePost = e.target.closest("[data-delete-post]");
+  if (deletePost) {
+    if (!confirm("確定要刪除這篇貼文嗎？")) return;
+    await DB.deletePost(+deletePost.dataset.deletePost);
+    toast("貼文已刪除");
+    loadDashboard();
+    return;
+  }
+  const deleteComment = e.target.closest("[data-delete-comment]");
+  if (deleteComment) {
+    if (!confirm("確定要刪除這則留言嗎？")) return;
+    await DB.deleteComment(+deleteComment.dataset.deleteComment);
+    toast("留言已刪除");
+    loadDashboard();
+    return;
+  }
+});
+
+(async () => {
+  if (!DB.ready) {
+    $("dash-root").innerHTML = `<div class="feed-empty"><span class="emoji">🔌</span><strong>展示模式無法使用管理後台</strong><p>需先在 config.js 接上資料庫</p></div>`;
+    return;
+  }
+  const isMod = await DB.isMod();
+  if (!isMod) { location.href = "admin.html"; return; }
+  try { await loadDashboard(); }
+  catch (e) { toast("載入失敗，請重新整理"); console.error(e); }
+})();

@@ -64,13 +64,7 @@ ${extraHead}
 </head>
 <body>
 <div id="app">${body}</div>
-<script>
-  // 深淺色跟主站共用同一個設定
-  if (localStorage.getItem("kgsh-theme") === "dark" ||
-      (!localStorage.getItem("kgsh-theme") && matchMedia("(prefers-color-scheme: dark)").matches)) {
-    document.documentElement.dataset.theme = "dark";
-  }
-</script>
+<script src="/theme.js"></script>
 </body>
 </html>`;
 }
@@ -113,8 +107,9 @@ async function renderIntoApp(origin, { headTags, article }) {
 }
 
 export default async function handler(req, res) {
-  const proto = req.headers["x-forwarded-proto"] || "http";
-  const { origin } = new URL(req.url, `${proto}://${req.headers.host}`);
+  // 網址一律用固定的正式站網域。Host 標頭是請求方帶來的，若照它組網址，
+  // 偽造的 Host 會讓這頁去抓別人的 index.html 並把它當成港討回給使用者。
+  const origin = "https://hkhs.vercel.app";
   const id = req.query.id;
   const post = await fetchPost(id);
 
