@@ -77,8 +77,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ?from=120&to=135：查指定編號區間（追查「為什麼某幾篇突然被發出去」用）
+    const from = Number.isInteger(Number(req.query?.from)) ? Number(req.query.from) : null;
+    const to = Number.isInteger(Number(req.query?.to)) ? Number(req.query.to) : null;
     const posts = await sbGet(
-      `posts?order=id.desc&limit=${n}&select=id,title,board,hidden,created_at`
+      from !== null && to !== null && to >= from && to - from < 200
+        ? `posts?id=gte.${from}&id=lte.${to}&order=id.desc&select=id,title,board,hidden,created_at`
+        : `posts?order=id.desc&limit=${n}&select=id,title,board,hidden,created_at`
     );
     const ids = posts.map((p) => p.id).join(",");
     const [ig, th] = await Promise.all([
@@ -90,7 +95,7 @@ export default async function handler(req, res) {
 
     const brief = (r) => {
       if (!r) return "沒有紀錄（還沒輪到，或通知沒送到）";
-      if (r.status === "published") return `已發佈 ${r.ig_media_id || r.threads_id || ""}`.trim();
+      if (r.status === "published") return `已發佈 ${r.ig_media_id || r.threads_id || ""} @${r.published_at || ""}`.trim();
       if (r.status === "publishing") return "發佈中";
       return `${r.status}（第 ${r.attempts} 次）${r.last_error ? " → " + r.last_error : ""}`;
     };
